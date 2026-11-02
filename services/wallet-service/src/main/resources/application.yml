@@ -1,0 +1,46 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: wallet-service
+  profiles:
+    active: dev            # enables /api/v1/dev/topup. Remove in production.
+  datasource:
+    url: jdbc:postgresql://localhost:5433/wallet
+    username: wallet
+    password: wallet
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks it
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: chatpay
+    password: chatpay
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/chatpay}
+  modulith:
+    republish-outstanding-events-on-restart: true   # outbox retry after a crash
+    events:
+      jdbc:
+        schema-initialization:
+          enabled: true    # creates the event_publication (outbox) table
+
+wallet:
+  default-currency: GMD
+  cors-origins: http://localhost:3000,http://localhost:3001
+  events-exchange: wallet.events
+  intent-ttl-seconds: 600          # how long a person-to-person payment can wait for confirmation
+  order-intent-ttl-seconds: 1800   # how long an order payment can wait for the customer to confirm
+  intent-sweep-interval-ms: 60000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

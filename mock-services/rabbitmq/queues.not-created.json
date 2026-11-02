@@ -1,0 +1,12 @@
+[
+  {
+    "name": "chat.wallet-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  }
+]

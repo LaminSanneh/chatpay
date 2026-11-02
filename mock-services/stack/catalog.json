@@ -1,0 +1,7 @@
+{
+  "products": [
+    {"id": 7,  "slug": "ceramic-mug",      "name": "Ceramic mug",      "priceMinor": 2500,  "stock": 40, "isHot": true},
+    {"id": 8,  "slug": "wireless-earbuds", "name": "Wireless earbuds", "priceMinor": 45000, "stock": 12, "isHot": true},
+    {"id": 9,  "slug": "desk-lamp",        "name": "Desk lamp",        "priceMinor": 22000, "stock": 8,  "isHot": false}
+  ]
+}

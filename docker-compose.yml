@@ -1,0 +1,54 @@
+# Dev infrastructure only. The three apps run on your host (see README).
+name: chatpay
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7   # bump to the latest 26.x when you like
+    # Dev mode keeps its H2 database inside the container, and the realm is re-imported when the container is
+    # recreated. Do NOT mount a named volume at /opt/keycloak/data/h2: Docker creates it root-owned and Keycloak
+    # (uid 1000) then fails with AccessDeniedException.
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["8080:8080"]
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+
+  wallet-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wallet
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet
+    ports: ["5433:5432"]
+    volumes: [wallet-db-data:/var/lib/postgresql/data]
+
+  chat-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chat
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+    ports: ["5434:5432"]
+    volumes: [chat-db-data:/var/lib/postgresql/data]
+
+  store-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: store
+      POSTGRES_USER: store
+      POSTGRES_PASSWORD: store
+    ports: ["5435:5432"]
+    volumes: [store-db-data:/var/lib/postgresql/data]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: chatpay
+      RABBITMQ_DEFAULT_PASS: chatpay
+    ports: ["5672:5672", "15672:15672"]   # 15672 = management UI
+
+volumes:
+  wallet-db-data:
+  chat-db-data:
+  store-db-data:

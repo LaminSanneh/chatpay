@@ -1,0 +1,45 @@
+[
+  {
+    "name": "chat.wallet-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  },
+  {
+    "name": "chat.store-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  },
+  {
+    "name": "store.wallet-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0,
+    "arguments": {
+      "x-dead-letter-exchange": "store.dlx"
+    }
+  },
+  {
+    "name": "store.wallet-events.dlq",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 0,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  }
+]

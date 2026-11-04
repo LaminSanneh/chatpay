@@ -6,7 +6,7 @@ MOCK_STACK := http://127.0.0.1:9977
 MOCK_RABBIT := http://127.0.0.1:15673
 
 .DEFAULT_GOAL := help
-.PHONY: help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock
+.PHONY: help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
@@ -41,3 +41,9 @@ verify-mock: ## second terminal, mock-stack running: the store backend's verify.
 
 e2e-mock: ## second terminal, mock-stack running: scripts/e2e.sh against the stubs
 	KC=$(MOCK_STACK)/realms/chatpay WALLET=$(MOCK_STACK) CHAT=$(MOCK_STACK) STORE=$(MOCK_STACK) ./scripts/e2e.sh
+
+test-wallet: ## wallet: unit tests, then integration tests on real Postgres + RabbitMQ (needs Docker running)
+	cd services/wallet-service && mvn -B -ntp verify
+
+test-wallet-it: ## wallet: ONE integration test class, e.g.  make test-wallet-it IT=OrderEscrowIT
+	cd services/wallet-service && mvn -B -ntp verify -Dit.test=$(IT)

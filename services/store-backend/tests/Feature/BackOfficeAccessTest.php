@@ -21,7 +21,7 @@ class BackOfficeAccessTest extends TestCase
         Route::middleware(['web', SyncBackOfficeAccess::class])->get('/_test/office', fn () => 'in');
     }
 
-    private function session(int $expiresIn): array
+    private function getSession(int $expiresIn): array
     {
         return ['kc' => ['access' => 'old-access', 'refresh' => 'refresh-1', 'id' => 'id-1', 'expires_at' => time() + $expiresIn]];
     }
@@ -31,7 +31,7 @@ class BackOfficeAccessTest extends TestCase
         Http::fake();
         $user = $this->makeUser($this->alice, ['catalog-admin']);
 
-        $this->actingAs($user)->withSession($this->session(600))->get('/_test/office')->assertOk();
+        $this->actingAs($user)->withSession($this->getSession(600))->get('/_test/office')->assertOk();
 
         Http::assertNothingSent();
         $this->assertSame(['catalog-admin'], $user->fresh()->roles);
@@ -42,7 +42,7 @@ class BackOfficeAccessTest extends TestCase
         Http::fake(['*/protocol/openid-connect/token' => Http::response(['access_token' => 'new-access', 'refresh_token' => 'refresh-2', 'expires_in' => 900])]);
         $user = $this->makeUser($this->alice, ['catalog-admin']);
 
-        $this->actingAs($user)->withSession($this->session(-10))->get('/_test/office')->assertOk();
+        $this->actingAs($user)->withSession($this->getSession(-10))->get('/_test/office')->assertOk();
 
         $this->assertSame(['wallet-admin'], $user->fresh()->roles);   // what Keycloak says now, not what it said at sign-in
     }
@@ -52,7 +52,7 @@ class BackOfficeAccessTest extends TestCase
         Http::fake(['*/protocol/openid-connect/token' => Http::response(['error' => 'invalid_grant'], 400)]);
         $user = $this->makeUser($this->alice, ['catalog-admin']);
 
-        $this->actingAs($user)->withSession($this->session(-10))->get('/_test/office')
+        $this->actingAs($user)->withSession($this->getSession(-10))->get('/_test/office')
             ->assertRedirect(route('keycloak.redirect'));
 
         $this->assertGuest();

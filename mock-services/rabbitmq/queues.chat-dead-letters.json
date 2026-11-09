@@ -1,0 +1,71 @@
+[
+  {
+    "name": "chat.wallet-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0,
+    "arguments": {
+      "x-dead-letter-exchange": "chat.dlx"
+    }
+  },
+  {
+    "name": "chat.store-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0,
+    "arguments": {
+      "x-dead-letter-exchange": "chat.dlx"
+    }
+  },
+  {
+    "name": "store.wallet-events",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 1,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0,
+    "arguments": {
+      "x-dead-letter-exchange": "store.dlx"
+    }
+  },
+  {
+    "name": "chat.wallet-events.dlq",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 0,
+    "messages_ready": 1,
+    "messages_unacknowledged": 0,
+    "messages": 1
+  },
+  {
+    "name": "chat.store-events.dlq",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 0,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  },
+  {
+    "name": "store.wallet-events.dlq",
+    "vhost": "/",
+    "durable": true,
+    "state": "running",
+    "consumers": 0,
+    "messages_ready": 0,
+    "messages_unacknowledged": 0,
+    "messages": 0
+  }
+]

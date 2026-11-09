@@ -7,3 +7,7 @@ target/
 .idea/
 .vscode/
 .env.local
+
+# Python bytecode (mock-services)
+__pycache__/
+*.pyc

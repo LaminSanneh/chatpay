@@ -56,23 +56,28 @@ fi
 if [ -z "$queues" ] || ! echo "$queues" | python3 -c 'import sys,json; json.load(sys.stdin)' 2>/dev/null; then
   row "queues" "$unreachable"; down=$((down+1))
 else
-  echo "$queues" | python3 -c '
+echo "$queues" | python3 -c '
 import sys, json
 have = {q["name"]: q for q in json.load(sys.stdin)}
-expect = [("chat.wallet-events", "chat-service"), ("chat.store-events", "chat-service"),
-          ("store.wallet-events", "store-backend: events:consume"), ("store.wallet-events.dlq", "dead letters")]
+mains = [("chat.wallet-events", "chat-service"), ("chat.store-events", "chat-service"), ("store.wallet-events", "store-backend: events:consume")]
+rows = [(n, o, False) for n, o in mains] + [(n + ".dlq", "dead letters", True) for n, _ in mains]
 bad = 0
-for name, owner in expect:
+for name, owner, is_dlq in rows:
     q = have.get(name)
     if q is None:
         print(f"  {name:<30} not created yet ({owner} has not connected since RabbitMQ started)"); bad += 1; continue
     ready, unacked, consumers = q.get("messages_ready", 0), q.get("messages_unacknowledged", 0), q.get("consumers", 0)
-    note = ""
-    if name.endswith(".dlq"):
+    note, extra = "", ""
+    if is_dlq:
         if ready: note = "  <-- DEAD LETTERS waiting for a person, see docs/events.md"; bad += 1
-    elif consumers == 0: note = f"  <-- NOBODY IS LISTENING ({owner} is not running or not connected)"; bad += 1
-    elif ready > 20: note = "  <-- backlog growing"
-    print(f"  {name:<30} consumers={consumers} ready={ready} unacked={unacked}{note}")
+    else:
+        if consumers == 0: note = f"  <-- NOBODY IS LISTENING ({owner} is not running or not connected)"; bad += 1
+        elif ready > 20: note = "  <-- backlog growing"
+        if not (q.get("arguments") or {}).get("x-dead-letter-exchange"):
+            note += "  <-- NO DEAD-LETTER EXCHANGE: a failed message would be discarded (chat: scripts/reset-chat-queues.sh --yes, then restart the service)"; bad += 1
+        retrying = sum(x.get("messages_ready", 0) + x.get("messages_unacknowledged", 0) for n, x in have.items() if n.startswith(name + ".retry."))
+        if retrying: extra = f" retrying={retrying}"
+    print(f"  {name:<30} consumers={consumers} ready={ready} unacked={unacked}{extra}{note}")
 sys.exit(1 if bad else 0)
 ' || down=$((down+1))
 fi

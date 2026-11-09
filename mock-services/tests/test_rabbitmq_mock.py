@@ -21,14 +21,15 @@ rabbit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rabbit)
 
 GOOD = "Basic " + base64.b64encode(b"chatpay:chatpay").decode()
-EXPECTED_QUEUES = {"chat.wallet-events", "chat.store-events", "store.wallet-events", "store.wallet-events.dlq"}
+MAIN = {"chat.wallet-events", "chat.store-events", "store.wallet-events"}
+EXPECTED_QUEUES = MAIN | {q + ".dlq" for q in MAIN}
 
 
 class HandleTests(unittest.TestCase):
     def test_queues_with_valid_credentials(self):
         status, body = rabbit.handle("GET", "/api/queues", GOOD, FIXTURES / "queues.json")
         self.assertEqual(status, 200)
-        self.assertEqual({q["name"] for q in body}, EXPECTED_QUEUES)
+        self.assertTrue(EXPECTED_QUEUES <= {q["name"] for q in body})
 
     def test_query_string_is_ignored(self):
         self.assertEqual(rabbit.handle("GET", "/api/queues?columns=name", GOOD, FIXTURES / "queues.json")[0], 200)
@@ -61,7 +62,7 @@ class HandleTests(unittest.TestCase):
 class FixtureTests(unittest.TestCase):
     def test_every_fixture_is_a_list_of_well_formed_queues(self):
         files = sorted(FIXTURES.glob("queues*.json"))
-        self.assertGreaterEqual(len(files), 5)
+        self.assertGreaterEqual(len(files), 8)
         for f in files:
             queues = json.loads(f.read_text())
             names = [q["name"] for q in queues]
@@ -69,13 +70,14 @@ class FixtureTests(unittest.TestCase):
             for q in queues:
                 for key in ("name", "consumers", "messages_ready", "messages_unacknowledged"):
                     self.assertIn(key, q, f"{f.name}: {q.get('name')} lacks {key}")
-                self.assertTrue(set(names) <= EXPECTED_QUEUES, f"{f.name} has an unknown queue")
+                self.assertTrue(all(n in EXPECTED_QUEUES or ".retry." in n for n in names), f"{f.name} has an unknown queue")
 
     def test_the_default_fixture_is_the_healthy_one(self):
         for q in json.loads((FIXTURES / "queues.json").read_text()):
             self.assertEqual(q["messages_ready"], 0)
-            if not q["name"].endswith(".dlq"):
+            if q["name"] in MAIN:                                   # dead-letter and retry queues have no consumers by design
                 self.assertGreaterEqual(q["consumers"], 1, q["name"])
+                self.assertIn("x-dead-letter-exchange", q.get("arguments", {}), q["name"])
 
 
 class DoctorAgainstFixtures(unittest.TestCase):
@@ -120,9 +122,22 @@ class DoctorAgainstFixtures(unittest.TestCase):
 
     def test_queues_that_were_never_created_are_reported_as_such(self):
         r = self.report("queues.not-created.json")
-        for q in ("chat.store-events", "store.wallet-events", "store.wallet-events.dlq"):
+        for q in ("chat.store-events", "store.wallet-events", "chat.wallet-events.dlq", "chat.store-events.dlq", "store.wallet-events.dlq"):
             self.assertIn("not created yet", self.line(r, q))
         self.assertNotIn("not created yet", self.line(r, "chat.wallet-events"))
+
+    def test_chat_dead_letters_are_flagged_too(self):
+        self.assertIn("DEAD LETTERS", self.line(self.report("queues.chat-dead-letters.json"), "chat.wallet-events.dlq"))
+
+    def test_a_queue_without_a_dead_letter_exchange_is_flagged(self):
+        r = self.report("queues.no-dead-letter-exchange.json")
+        self.assertIn("NO DEAD-LETTER EXCHANGE", self.line(r, "chat.store-events"))
+        self.assertNotIn("NO DEAD-LETTER EXCHANGE", self.line(r, "chat.wallet-events"))
+
+    def test_messages_waiting_to_be_retried_are_counted_on_their_queue(self):
+        r = self.report("queues.retrying.json")
+        self.assertIn("retrying=3", self.line(r, "chat.wallet-events"))
+        self.assertNotIn("retrying", self.line(r, "chat.store-events"))
 
     def test_an_unreadable_fixture_is_a_clear_error(self):
         env = dict(os.environ, RABBIT_FIXTURE="/nonexistent/queues.json")

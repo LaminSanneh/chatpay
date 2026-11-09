@@ -54,10 +54,21 @@ The wallet consumes nothing from RabbitMQ.
 |---|---|---|
 | store-backend consumer | exception while handling a message (bad JSON, bug, database down) | rejected without requeue -> dead-letter exchange `store.dlx` -> queue `store.wallet-events.dlq`. It stays there until a person replays or discards it. |
 | store-backend consumer | a payment that does not match the order, or arrives for a cancelled order | NOT a failure: order -> `payment_review`, or an automatic refund. Nothing goes to the DLQ. |
-| chat-service consumers | exception while handling a message | logged, rejected without requeue, and since those queues have NO dead-letter exchange the message is DISCARDED. This is a known gap (see the checklist). |
+| chat-service consumers | exception while handling a message | transient (database or network trouble, unknown errors): retried with exponential backoff (2s, 4s, 8s, 16s, 30s), then dead-lettered. Permanent (bad JSON, failed validation): dead-lettered at once. Dead letters wait in `<queue>.dlq` with the error in headers. If the copy cannot be stored, the message goes back to its queue: nothing is dropped. |
 | wallet-service | RabbitMQ down when publishing | event stays in `event_publication`; republished at restart |
 | store-backend relay | RabbitMQ down | the command fails and exits; rows stay unpublished; a supervisor restarts it and they are sent |
 | any consumer | down for a while | the durable queue keeps the messages until it is back |
+
+## Retry and dead-letter topology (chat-service)
+    <exchange> --routing keys--> chat.<x>-events --transient error--> chat.<x>-events.retry.<delay>ms   (one per backoff step, TTL = delay)
+                                      ^                                          |
+                                      +---------- TTL expires: back to the main queue
+    chat.<x>-events --permanent error, or retries used up--> chat.dlx --> chat.<x>-events.dlq   (waits for a person)
+- Code: `services/chat-service/src/messaging/` (`topology.ts`, `retry-policy.ts`, `consumer-runner.ts`). Policy: `RETRY_INITIAL_MS`, `RETRY_MULTIPLIER`, `RETRY_MAX_MS`, `RETRY_MAX_ATTEMPTS` (defaults 2000, 2, 30000, 5 retries).
+- The main queues also carry `x-dead-letter-exchange` / `x-dead-letter-routing-key`, so a bare reject at the broker level lands in the DLQ too.
+- A retried message returns through the default exchange; its original routing key travels in `x-original-routing-key`. Retries can reorder events: consumers are idempotent.
+- Headers on a dead letter: `x-failure-kind`, `x-error-class`, `x-error`, `x-error-stack`, `x-original-queue`, `x-original-routing-key`, `x-retry-count`, `x-first-failed-at`, `x-failed-at`.
+- Queues created before this change must be deleted once (RabbitMQ will not redeclare a queue with different arguments): `./scripts/reset-chat-queues.sh --yes`. `make doctor` flags a queue without a dead-letter exchange.
 
 ## Dead-letter queues: how to think about them
 A dead-letter queue is a quarantine, not a retry mechanism. Messages land there when a consumer rejects them, expires them, or a queue overflows.

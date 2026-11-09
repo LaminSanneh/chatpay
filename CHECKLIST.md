@@ -69,8 +69,8 @@ How things were checked so far:
 - [x] Rate limits authenticate first and are per signed-in person (an anonymous call can no longer use up the quota); verify.sh now prints the HTTP status it got
 
 ## "Next: messaging reliability" (found while mapping the events, see docs/events.md)
-- [ ] Chat consumers (`chat.wallet-events`, `chat.store-events`) currently DISCARD a message that fails (nack without requeue, no dead-letter exchange). Add DLQs, and retry transient errors (e.g. Postgres briefly down) before dead-lettering
-- [ ] Retry queues with delays (10 s, 30 s, 5 min) then DLQ, for chat and store consumers; or quorum queues with `x-delivery-limit`
+- [x] Chat consumers retry transient errors with exponential backoff, then dead-letter; permanent errors dead-letter at once; nothing is discarded (retry queues + `chat.dlx` + `<queue>.dlq`; unit tests, plus a real-broker integration test that runs under `make test-chat` and in CI)
+- [ ] Same retry-with-backoff for the store backend's consumer (it dead-letters at once today); or quorum queues with `x-delivery-limit`
 - [ ] A way to look at and replay dead letters: a replay script/command per service (or RabbitMQ Shovel "move messages"); document the runbook
 - [ ] Alert when any DLQ depth is above zero; alert when `outbox_events` / `event_publication` rows stay unpublished for more than a few minutes
 - [ ] Wallet: republish incomplete events periodically (Modulith `IncompleteEventPublications`), not only at restart

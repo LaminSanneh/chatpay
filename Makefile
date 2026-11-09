@@ -6,7 +6,8 @@ MOCK_STACK := http://127.0.0.1:9977
 MOCK_RABBIT := http://127.0.0.1:15673
 
 .DEFAULT_GOAL := help
-.PHONY: help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it
+TEST_CHAT_ENV := TEST_DATABASE_URL=postgres://chat:chat@localhost:5434/chat RABBITMQ_URL=amqp://chatpay:chatpay@localhost:5672
+.PHONY: test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
@@ -47,3 +48,6 @@ test-wallet: ## wallet: unit tests, then integration tests on real Postgres + Ra
 
 test-wallet-it: ## wallet: ONE integration test class, e.g.  make test-wallet-it IT=OrderEscrowIT
 	cd services/wallet-service && mvn -B -ntp verify -Dit.test=$(IT)
+
+test-chat: ## chat-service: unit tests + Postgres + the RabbitMQ retry/dead-letter integration test (docker compose up -d first)
+	cd services/chat-service && $(TEST_CHAT_ENV) npm test

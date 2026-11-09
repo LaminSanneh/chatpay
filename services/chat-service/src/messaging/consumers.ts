@@ -1,6 +1,9 @@
 import amqp from 'amqplib';
 import { z } from 'zod';
 import type { ChatService } from '../core/chat-service';
+import { type Handler, startConsumer } from './consumer-runner';
+import { type RetryPolicy, retryPolicyFromEnv } from './retry-policy';
+import type { ConsumerSpec } from './topology';
 
 const TransferCompleted = z.object({
   version: z.number().optional(),
@@ -44,19 +47,17 @@ export interface BrokerConfig {
   storeQueue: string;
 }
 
-interface Binding {
-  exchange: string;
-  queue: string;
-  routingKeys: string[];
-  handle: (routingKey: string, payload: unknown) => Promise<void>;
+interface Binding extends ConsumerSpec {
+  handle: Handler;
 }
 
 /**
  * Consumes wallet events (payment bubbles) and store events (store icon on contacts, gift-order bubbles).
- * Each queue is durable, so events wait while the chat is down. Retries the broker connection forever so the
+ * Each queue is durable, so events wait while the chat is down. Failures are retried with exponential backoff and then dead-lettered
+ * (see consumer-runner.ts and topology.ts), so no message is ever silently dropped. Retries the broker connection forever so the
  * chat keeps working without these features while RabbitMQ is down.
  */
-export function startEventConsumers(cfg: BrokerConfig, chat: ChatService) {
+export function startEventConsumers(cfg: BrokerConfig, chat: ChatService, policy: RetryPolicy = retryPolicyFromEnv()) {
   const bindings: Binding[] = [
     {
       exchange: cfg.walletExchange, queue: cfg.walletQueue, routingKeys: ['transfer.completed'],
@@ -71,38 +72,34 @@ export function startEventConsumers(cfg: BrokerConfig, chat: ChatService) {
       },
     },
   ];
-  void connectLoop(cfg.url, bindings);
+  void connectLoop(cfg.url, bindings, policy);
 }
 
-async function connectLoop(url: string, bindings: Binding[]) {
+async function connectLoop(url: string, bindings: Binding[], policy: RetryPolicy) {
   for (;;) {
+    let conn: Awaited<ReturnType<typeof amqp.connect>> | undefined;
     try {
-      const conn = await amqp.connect(url);
-      const channel = await conn.createChannel();
+      conn = await amqp.connect(url);
+      const channel = await conn.createConfirmChannel();      // publisher confirms: a failed message is only acked once its copy is safely stored
       await channel.prefetch(10);
       for (const b of bindings) {
-        await channel.assertExchange(b.exchange, 'topic', { durable: true });
-        await channel.assertQueue(b.queue, { durable: true });
-        for (const key of b.routingKeys) await channel.bindQueue(b.queue, b.exchange, key);
-        await channel.consume(b.queue, async (msg) => {
-          if (!msg) return;
-          try {
-            await b.handle(msg.fields.routingKey, JSON.parse(msg.content.toString('utf8')));
-            channel.ack(msg);
-          } catch (err) {
-            // Malformed or unprocessable: drop it (TODO: route to a dead-letter queue, see CHECKLIST).
-            console.error(`[events] failed to process ${msg.fields.routingKey}`, err);
-            channel.nack(msg, false, false);
-          }
-        });
-        console.log(`[events] consuming ${b.queue} <- ${b.exchange} (${b.routingKeys.join(', ')})`);
+        const names = await startConsumer(channel, b, b.handle, { policy });
+        console.log(`[events] consuming ${b.queue} <- ${b.exchange} (${b.routingKeys.join(', ')}); retries: ${names.retryQueues.map((r) => r.delayMs + 'ms').join(', ')}; dead letters: ${names.dlq}`);
       }
+      const open = conn;
       await new Promise<void>((resolve) => {
-        conn.on('close', () => { console.error('[events] connection closed, reconnecting'); resolve(); });
-        conn.on('error', (e: Error) => console.error('[events] connection error', e.message));
+        open.on('close', () => { console.error('[events] connection closed, reconnecting'); resolve(); });
+        open.on('error', (e: Error) => console.error('[events] connection error', e.message));
       });
     } catch (err) {
-      console.error('[events] connect failed, retrying in 5s:', (err as Error).message);
+      const message = (err as Error).message;
+      if (/PRECONDITION/i.test(message)) {
+        console.error('[events] A queue already exists with different settings (it was created before dead-lettering was added). '
+          + 'Delete the chat queues once and restart: scripts/reset-chat-queues.sh --yes. Details: ' + message);
+      } else {
+        console.error('[events] connect failed, retrying in 5s:', message);
+      }
+      await conn?.close().catch(() => undefined);
     }
     await new Promise((r) => setTimeout(r, 5000));
   }

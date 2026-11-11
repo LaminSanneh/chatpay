@@ -40,5 +40,13 @@ return [
         'dead_letter_exchange' => 'store.dlx',
     ],
 
+    // Failed events are retried with exponential backoff (2s, 4s, 8s, 16s, 30s), then dead-lettered. See app/Messaging.
+    'retry' => [
+        'initial_delay_ms' => (int) env('STORE_RETRY_INITIAL_MS', 2000),
+        'multiplier' => (float) env('STORE_RETRY_MULTIPLIER', 2),
+        'max_delay_ms' => (int) env('STORE_RETRY_MAX_MS', 30000),
+        'max_attempts' => (int) env('STORE_RETRY_MAX_ATTEMPTS', 5),
+    ],
+
     'storefront_url' => env('STORE_WEB_URL', 'http://localhost:3001'),
 ];

@@ -1,0 +1,15 @@
+{
+  "orderId": "4e7a1c52-9d3b-4a6f-8b2e-5c1d0f9a8b7c",
+  "storeId": "7",
+  "storeName": "Bob's Shop",
+  "buyerUserId": "11111111-1111-4111-8111-111111111111",
+  "recipientUserId": "22222222-2222-4222-8222-222222222222",
+  "totalMinor": 5000,
+  "currency": "GMD",
+  "items": [
+    { "name": "Ceramic mug", "quantity": 2, "unitPriceMinor": 2500, "imageUrl": "https://example.com/mug.png" }
+  ],
+  "context": { "type": "chat", "roomId": "7c1f0e9a-2b3d-4c5e-8f6a-9b0c1d2e3f40" },
+  "version": 1,
+  "occurredAt": "2026-11-12T10:16:03+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "settlementId": "c1e3a5b7-2d4f-4b8a-9c6e-1f3a5b7d9e02",
+  "orderId": "4e7a1c52-9d3b-4a6f-8b2e-5c1d0f9a8b7c",
+  "kind": "RELEASE",
+  "storeId": "7",
+  "payerUserId": "11111111-1111-4111-8111-111111111111",
+  "amountMinor": 5000,
+  "commissionMinor": 500,
+  "currency": "GMD",
+  "occurredAt": "2026-11-19T09:00:00.500Z"
+}

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "transferId": "a3d5f7b9-1c2e-4a6b-9d8c-0e1f2a3b4c5d",
+  "intentId": "5b8e0d2f-7a9c-4c1e-8b3d-6f4a2c0e9d71",
+  "kind": "ORDER_PAYMENT",
+  "fromUserId": "11111111-1111-4111-8111-111111111111",
+  "toUserId": "store:7",
+  "amountMinor": 5000,
+  "currency": "GMD",
+  "note": "Order 4e7a1c52",
+  "referenceType": "order",
+  "referenceId": "4e7a1c52-9d3b-4a6f-8b2e-5c1d0f9a8b7c",
+  "occurredAt": "2026-11-12T10:16:02.250Z"
+}

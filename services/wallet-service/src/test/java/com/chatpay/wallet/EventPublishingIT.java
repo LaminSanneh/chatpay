@@ -1,5 +1,6 @@
 package com.chatpay.wallet;
 
+import com.chatpay.wallet.support.Contracts;
 import com.chatpay.wallet.support.OrderWalletIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
@@ -223,5 +224,31 @@ class EventPublishingIT extends OrderWalletIntegrationTest {
         awaitEvent("settlement.completed", b -> b.path("orderId").asText().equals(marker));
 
         assertThat(countOf("settlement.completed", b -> b.path("orderId").asText().equals(order))).isEqualTo(1);
+    }
+
+    // ------------------------------------------------------------------ the shared fixtures (contracts/events)
+    @Test
+    void messagesOnTheBrokerHaveTheShapeOfTheSharedFixtures() {
+        String alice = newUser(), bob = newUser(), store = newStore();
+        String paidOrder = newOrder(), releasedOrder = newOrder(), refundedOrder = newOrder();
+        topUp(alice, 20_000);
+        Response p2p = post("/api/v1/transfer-intents", as(alice),
+                Map.of("toUserId", bob, "amountMinor", 2_500, "note", "lunch", "reference", Map.of("type", "chat", "id", "room-1")));
+        String p2pIntent = p2p.text("id");
+        confirm(alice, p2pIntent);
+        String orderIntent = payOrder(alice, store, paidOrder, 5_000);
+        payOrder(alice, store, releasedOrder, 4_000);
+        payOrder(alice, store, refundedOrder, 2_000);
+        release(releasedOrder, newKey(), 400, null);
+        refund(refundedOrder, newKey(), null);
+
+        assertSameShape("transfer.completed.p2p", awaitEvent("transfer.completed", b -> b.path("intentId").asText().equals(p2pIntent)).body());
+        assertSameShape("transfer.completed.order-payment", awaitEvent("transfer.completed", b -> b.path("intentId").asText().equals(orderIntent)).body());
+        assertSameShape("settlement.completed.release", awaitEvent("settlement.completed", b -> b.path("orderId").asText().equals(releasedOrder)).body());
+        assertSameShape("settlement.completed.refund", awaitEvent("settlement.completed", b -> b.path("orderId").asText().equals(refundedOrder)).body());
+    }
+
+    private void assertSameShape(String fixture, JsonNode actual) {
+        assertThat(Contracts.shapeDifferences(Contracts.load(fixture), actual)).as("%s versus the message on the broker", fixture).isEmpty();
     }
 }

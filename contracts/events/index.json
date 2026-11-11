@@ -1,0 +1,9 @@
+[
+  { "file": "transfer.completed.p2p.json",           "exchange": "wallet.events", "routingKey": "transfer.completed",   "producer": "wallet-service", "consumers": ["chat-service", "store-backend"], "note": "kind P2P: chat shows a payment bubble; the store ignores it" },
+  { "file": "transfer.completed.order-payment.json", "exchange": "wallet.events", "routingKey": "transfer.completed",   "producer": "wallet-service", "consumers": ["chat-service", "store-backend"], "note": "kind ORDER_PAYMENT: the store marks the order paid; chat ignores it" },
+  { "file": "settlement.completed.release.json",     "exchange": "wallet.events", "routingKey": "settlement.completed", "producer": "wallet-service", "consumers": ["store-backend"], "note": "escrow released to the store minus commission" },
+  { "file": "settlement.completed.refund.json",      "exchange": "wallet.events", "routingKey": "settlement.completed", "producer": "wallet-service", "consumers": ["store-backend"], "note": "escrow returned to the buyer" },
+  { "file": "store.opened.json",                     "exchange": "store.events",  "routingKey": "store.opened",         "producer": "store-backend",  "consumers": ["chat-service"], "note": "also sent when an active store is renamed" },
+  { "file": "store.closed.json",                     "exchange": "store.events",  "routingKey": "store.closed",         "producer": "store-backend",  "consumers": ["chat-service"] },
+  { "file": "order.paid.json",                       "exchange": "store.events",  "routingKey": "order.paid",           "producer": "store-backend",  "consumers": ["chat-service"], "note": "chat only shows it when the order was bought for the other person" }
+]

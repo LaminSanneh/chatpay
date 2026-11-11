@@ -5,7 +5,7 @@ import { type Handler, startConsumer } from './consumer-runner';
 import { type RetryPolicy, retryPolicyFromEnv } from './retry-policy';
 import type { ConsumerSpec } from './topology';
 
-const TransferCompleted = z.object({
+export const TransferCompleted = z.object({
   version: z.number().optional(),
   transferId: z.string(),
   intentId: z.string().nullish(),
@@ -20,7 +20,7 @@ const TransferCompleted = z.object({
   occurredAt: z.string().optional(),
 });   // unknown extra fields are ignored => producers can add fields without breaking us
 
-const OrderPaid = z.object({
+export const OrderPaid = z.object({
   version: z.number().optional(),
   orderId: z.string(),
   storeId: z.string(),
@@ -36,8 +36,8 @@ const OrderPaid = z.object({
   occurredAt: z.string().optional(),
 });
 
-const StoreOpened = z.object({ ownerUserId: z.string(), storeId: z.string(), name: z.string(), slug: z.string() });
-const StoreClosed = z.object({ ownerUserId: z.string(), storeId: z.string() });
+export const StoreOpened = z.object({ ownerUserId: z.string(), storeId: z.string(), name: z.string(), slug: z.string() });
+export const StoreClosed = z.object({ ownerUserId: z.string(), storeId: z.string() });
 
 export interface BrokerConfig {
   url: string;

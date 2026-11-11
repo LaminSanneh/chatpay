@@ -7,7 +7,7 @@ MOCK_RABBIT := http://127.0.0.1:15673
 
 .DEFAULT_GOAL := help
 TEST_CHAT_ENV := TEST_DATABASE_URL=postgres://chat:chat@localhost:5434/chat RABBITMQ_URL=amqp://chatpay:chatpay@localhost:5672
-.PHONY: test-contracts e2e-resilience test-store-unit test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it
+.PHONY: test-contracts e2e-resilience test-store-unit test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it run-wallet run-chat run-store run-all-services
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
@@ -60,3 +60,15 @@ e2e-resilience: ## the REAL stack up: stop/start RabbitMQ and the chat database 
 
 test-store-unit: ## store backend: the framework-free retry/dead-letter unit tests (after composer install)
 	cd services/store-backend && vendor/bin/phpunit --bootstrap tests/standalone-bootstrap.php tests/Unit/Messaging
+
+run-wallet: ## run the wallet-service Spring Boot app on :8081 (own terminal)
+	cd services/wallet-service && mvn spring-boot:run
+
+run-chat: ## run the chat-service Node app on :4000 (own terminal)
+	cd services/chat-service && npm run dev
+
+run-store: ## run the store-backend Laravel app on :8000 (own terminal)
+	cd services/store-backend && php artisan serve
+
+run-all-services: ## run all three backend services concurrently in the background (use 'make stop-services' or Ctrl-C to manage)
+	./scripts/run-all.sh

@@ -33,7 +33,7 @@ class OutboxSweeper {
     @Scheduled(fixedDelayString = "${wallet.event-republish-interval-ms:30000}", initialDelayString = "${wallet.event-republish-interval-ms:30000}")
     void sweep() {
         try {
-            incompleteEventPublications.resubmitIncompleteEventPublicationsOlderThan(minAge);
+            incompleteEventPublications.resubmitIncompletePublicationsOlderThan(minAge);
         } catch (RuntimeException e) {
             // Never let the timer die: the broker may simply still be down. The next tick tries again.
             log.warn("Could not republish stored events, will try again: {}", e.getMessage());

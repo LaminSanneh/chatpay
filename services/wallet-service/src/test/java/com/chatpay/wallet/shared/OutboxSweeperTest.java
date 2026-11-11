@@ -24,7 +24,7 @@ class OutboxSweeperTest {
     void sweepingResubmitsEventsThatHaveBeenWaitingLongerThanTheConfiguredAge() {
         new OutboxSweeper(incomplete, 45).sweep();
 
-        verify(incomplete).resubmitIncompleteEventPublicationsOlderThan(Duration.ofSeconds(45));
+        verify(incomplete).resubmitIncompletePublicationsOlderThan(Duration.ofSeconds(45));
         verifyNoMoreInteractions(incomplete);
     }
 
@@ -36,12 +36,12 @@ class OutboxSweeperTest {
         sweeper.sweep();
         sweeper.sweep();
 
-        verify(incomplete, times(3)).resubmitIncompleteEventPublicationsOlderThan(Duration.ofSeconds(30));
+        verify(incomplete, times(3)).resubmitIncompletePublicationsOlderThan(Duration.ofSeconds(30));
     }
 
     @Test
     void aFailureIsLoggedNotThrownSoTheTimerKeepsRunning() {
-        doThrow(new IllegalStateException("broker down")).when(incomplete).resubmitIncompleteEventPublicationsOlderThan(any(Duration.class));
+        doThrow(new IllegalStateException("broker down")).when(incomplete).resubmitIncompletePublicationsOlderThan(any(Duration.class));
 
         assertThatCode(() -> new OutboxSweeper(incomplete, 30).sweep()).doesNotThrowAnyException();
     }

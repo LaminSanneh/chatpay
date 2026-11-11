@@ -37,7 +37,7 @@ class EventContractTest {
 
         TransferCompleted event = MAPPER.treeToValue(expected, TransferCompleted.class);
 
-        assertThat(MAPPER.valueToTree(event)).isEqualTo(expected);
+        assertThat(MAPPER.valueToTree(event).toString()).isEqualTo(expected.toString());
     }
 
     @ParameterizedTest(name = "{0}")
@@ -47,7 +47,7 @@ class EventContractTest {
 
         SettlementCompleted event = MAPPER.treeToValue(expected, SettlementCompleted.class);
 
-        assertThat(MAPPER.valueToTree(event)).isEqualTo(expected);
+        assertThat(MAPPER.valueToTree(event).toString()).isEqualTo(expected.toString());
     }
 
     @Test
@@ -65,7 +65,7 @@ class EventContractTest {
 
         TransferCompleted event = MAPPER.treeToValue(withoutNote, TransferCompleted.class);
 
-        assertThat(MAPPER.valueToTree(event)).as("the record still writes a note, so the fixture was incomplete").isNotEqualTo(withoutNote);
+        assertThat(MAPPER.valueToTree(event).toString()).as("the record still writes a note, so the fixture was incomplete").isNotEqualTo(withoutNote.toString());
     }
 
     @Test

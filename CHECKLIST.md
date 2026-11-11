@@ -70,13 +70,17 @@ How things were checked so far:
 
 ## "Next: messaging reliability" (found while mapping the events, see docs/events.md)
 - [x] Chat consumers retry transient errors with exponential backoff, then dead-letter; permanent errors dead-letter at once; nothing is discarded (retry queues + `chat.dlx` + `<queue>.dlq`; unit tests, plus a real-broker integration test that runs under `make test-chat` and in CI)
-- [ ] Same retry-with-backoff for the store backend's consumer (it dead-letters at once today); or quorum queues with `x-delivery-limit`
-- [ ] A way to look at and replay dead letters: a replay script/command per service (or RabbitMQ Shovel "move messages"); document the runbook
+- [x] Store backend consumer: retry with backoff, dead-letter, reconnect by itself (`app/Messaging`; unit tests run standalone, the glue is verified by `scripts/e2e-resilience.sh`)
+- [x] Dead-letter tool: `npm run dlq:list` / `dlq:replay` in services/chat-service (works for the store's DLQ too) and `docs/runbooks/dead-letters.md`
 - [ ] Alert when any DLQ depth is above zero; alert when `outbox_events` / `event_publication` rows stay unpublished for more than a few minutes
-- [ ] Wallet: republish incomplete events periodically (Modulith `IncompleteEventPublications`), not only at restart
-- [ ] Store relay: count failed attempts, back off, and exit non-zero so a supervisor restarts it; `dev.sh` does not restart crashed processes
-- [ ] Record the failure reason with each dead letter (headers) so triage does not need the logs
-- [ ] Schema versioning rules for events (`version` field exists): consumers ignore unknown fields, new fields only added
+- [x] Wallet: `OutboxSweeper` republishes incomplete events every 30s, not only at restart **(unit-tested; proven end to end only by e2e-resilience.sh broker-outage)**
+- [x] Store relay reconnects with backoff and reports how many events are waiting (it no longer exits, so `dev.sh` is enough)
+- [ ] Store outbox: per-row failure counters and the last error (needs a migration), shown by `make doctor`
+- [x] Failure reason recorded in headers of every dead letter (chat and store)
+- [x] Event contracts: shared fixtures in `contracts/events/` with rules (only add fields, bump `version` for breaking changes), tested by the wallet, store, chat and `make check`
+- [x] `scripts/e2e-resilience.sh`: chat database outage, poison messages, RabbitMQ outage, each asserting exactly-once delivery **(written; needs a first run on the real stack)**
+- [ ] Alerting: something that runs `make doctor` on a schedule and tells a person when a dead-letter queue is not empty
+- [ ] Correlation ids: one id from the HTTP request through the outbox event to the consumer's log lines
 
 ## Next: run it end to end
 - [ ] `docker compose up -d` (Keycloak :8080, wallet DB :5433, chat DB :5434, RabbitMQ :5672)

@@ -9,7 +9,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "dlq:list": "tsx src/tools/dlq-cli.ts list",
+    "dlq:replay": "tsx src/tools/dlq-cli.ts replay"
   },
   "dependencies": {
     "amqplib": "^0.10.5",

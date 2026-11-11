@@ -38,6 +38,8 @@ wallet:
   intent-ttl-seconds: 600          # how long a person-to-person payment can wait for confirmation
   order-intent-ttl-seconds: 1800   # how long an order payment can wait for the customer to confirm
   intent-sweep-interval-ms: 60000
+  event-republish-interval-ms: 30000       # how often events that could not be published (broker down) are retried
+  event-republish-min-age-seconds: 30      # ...once they have been waiting this long (so an event still being published is not sent twice)
 
 management:
   endpoints:

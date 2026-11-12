@@ -79,6 +79,7 @@ How things were checked so far:
 - [x] Failure reason recorded in headers of every dead letter (chat and store)
 - [x] Event contracts: shared fixtures in `contracts/events/` with rules (only add fields, bump `version` for breaking changes), tested by the wallet, store, chat and `make check`
 - [x] `scripts/e2e-resilience.sh`: chat database outage, poison messages, RabbitMQ outage, each asserting exactly-once delivery **(written; needs a first run on the real stack)**
+- [x] chat-service survives database and RabbitMQ outages: pool error listener + timeouts, startup wait for the database, AMQP connection loop that rebuilds on connection OR channel loss, process guards, 503 + Retry-After and `/ready` (alongside `/health`), ack failures no longer mistaken for handler failures (24 tests; `make e2e-resilience` checks the process stays up)
 - [ ] Alerting: something that runs `make doctor` on a schedule and tells a person when a dead-letter queue is not empty
 - [ ] Correlation ids: one id from the HTTP request through the outbox event to the consumer's log lines
 

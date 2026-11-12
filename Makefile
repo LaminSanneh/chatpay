@@ -68,7 +68,8 @@ run-chat: ## run the chat-service Node app on :4000 (own terminal)
 	cd services/chat-service && npm run dev
 
 run-store: ## run the store-backend Laravel app on :8000 (own terminal)
-	cd services/store-backend && php artisan serve
+# 	cd services/store-backend && php artisan serve
+	cd services/store-backend && ./dev.sh
 
 run-all-services: ## run all three backend services concurrently in the background (use 'make stop-services' or Ctrl-C to manage)
 	./scripts/run-all.sh

@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import { ChatError } from '../core/errors';
+import { isDependencyOutage } from '../messaging/retry-policy';
 import type { TokenVerifier } from '../core/ports';
 import type { ChatService } from '../core/chat-service';
 import type { Identity } from '../core/types';
@@ -10,6 +11,8 @@ export interface HttpDeps {
   chat: ChatService;
   verifier: TokenVerifier;
   corsOrigins: string[];
+  /** Readiness probe: resolves when the dependencies the service needs (the database) are reachable. */
+  ready?: () => Promise<unknown>;
 }
 
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler =>
@@ -18,12 +21,18 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 const idOf = (res: Response) => res.locals.identity as Identity;
 const param = (req: Request, name: string) => String(req.params[name]);
 
-export function createHttpApp({ chat, verifier, corsOrigins }: HttpDeps) {
+export function createHttpApp({ chat, verifier, corsOrigins, ready }: HttpDeps) {
   const app = express();
   app.use(cors({ origin: corsOrigins }));
   app.use(express.json({ limit: '32kb' }));
 
+  // Liveness: the process is up (stays 200 during a database outage, so an orchestrator does not restart a healthy service).
   app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
+  // Readiness: it can actually serve requests (503 while the database is unreachable).
+  app.get('/ready', async (_req, res) => {
+    try { await ready?.(); res.json({ status: 'ready' }); }
+    catch (err) { res.status(503).json({ status: 'unavailable', reason: (err as Error).message }); }
+  });
 
   const api = express.Router();
 
@@ -32,14 +41,19 @@ export function createHttpApp({ chat, verifier, corsOrigins }: HttpDeps) {
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!token) return void res.status(401).json({ code: 'UNAUTHENTICATED', message: 'Missing bearer token' });
+    let identity: Identity;
     try {
-      const identity = await verifier.verify(token);
-      await chat.touchUser(identity);
-      res.locals.identity = identity;
-      next();
+      identity = await verifier.verify(token);
     } catch {
-      res.status(401).json({ code: 'UNAUTHENTICATED', message: 'Invalid or expired token' });
+      return void res.status(401).json({ code: 'UNAUTHENTICATED', message: 'Invalid or expired token' });
     }
+    try {
+      await chat.touchUser(identity);          // a database failure here is an outage (503), not a bad token
+    } catch (err) {
+      return next(err);
+    }
+    res.locals.identity = identity;
+    next();
   });
 
   // ---- users
@@ -121,6 +135,10 @@ export function createHttpApp({ chat, verifier, corsOrigins }: HttpDeps) {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ChatError) return void res.status(err.status).json({ code: err.code, message: err.message });
     if (err instanceof z.ZodError) return void res.status(400).json({ code: 'VALIDATION_FAILED', message: err.issues[0]?.message ?? 'invalid request' });
+    if (isDependencyOutage(err)) {
+      console.warn(`[http] ${_req.method} ${_req.path}: a dependency is unavailable (${(err as Error).message})`);
+      return void res.set('Retry-After', '5').status(503).json({ code: 'SERVICE_UNAVAILABLE', message: 'Temporarily unavailable, please retry shortly' });
+    }
     console.error('[http] unhandled', err);
     res.status(500).json({ code: 'INTERNAL', message: 'Internal error' });
   });

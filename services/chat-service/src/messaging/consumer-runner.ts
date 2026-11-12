@@ -73,8 +73,6 @@ export async function processMessage(
 
   try {
     await handler(routingKey, JSON.parse(msg.content.toString('utf8')));
-    ch.ack(msg);
-    return;
   } catch (err) {
     const kind = classifyError(err);
     const error = describeError(err);
@@ -116,6 +114,14 @@ export async function processMessage(
       if (opts.requeueDelayMs) await new Promise((r) => setTimeout(r, opts.requeueDelayMs));
       try { ch.nack(msg, false, true); } catch { /* the channel is gone: the broker requeues the unacked message by itself */ }
     }
+    return;
+  }
+
+  // The handler succeeded. If the ack cannot be sent (the channel closed under us) the broker redelivers the message: safe, consumers are idempotent.
+  try {
+    ch.ack(msg);
+  } catch (ackError) {
+    log.warn(`[events] ${spec.queue} ${routingKey}: handled, but the ack could not be sent (${(ackError as Error).message}); the broker will redeliver it`);
   }
 }
 

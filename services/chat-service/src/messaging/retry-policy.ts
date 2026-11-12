@@ -88,3 +88,23 @@ export function describeError(err: unknown): { name: string; message: string; st
   const e = err instanceof Error ? err : new Error(String(err));
   return { name: e.name || 'Error', message: e.message.slice(0, 500), stack: (e.stack ?? '').slice(0, 2000) };
 }
+
+const OUTAGE_MESSAGE = /connection terminated|timeout exceeded when trying to connect|too many clients|connection refused|server closed the connection unexpectedly|terminating connection|database system is (starting up|shutting down)|channel closed|connection closed|socket (closed|hang up)|heartbeat timeout|client has encountered a connection error/i;
+
+/**
+ * True when the error means a dependency (the database, RabbitMQ) is unreachable or going away, as opposed to a bug or bad input.
+ * Such errors are expected during an outage: they must be logged calmly and recovered from, never crash the process.
+ */
+export function isDependencyOutage(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: unknown; message?: unknown };
+  const code = typeof e.code === 'string' ? e.code : '';
+  if (NETWORK_CODES.has(code)) return true;
+  if (/^(08|53|57P0[123])/.test(code)) return true;                  // Postgres: connection, resources, shutdown
+  return OUTAGE_MESSAGE.test(String(e.message ?? ''));
+}
+
+/** Wait before reconnecting after `failures` consecutive failures: 1s, 2s, 4s ... capped at 30s. */
+export function reconnectDelayMs(failures: number, baseMs = 1_000, maxMs = 30_000): number {
+  if (failures < 1) return 0;
+  return Math.min(baseMs * Math.pow(2, Math.min(failures - 1, 30)), maxMs);
+}

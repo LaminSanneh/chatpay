@@ -26,7 +26,7 @@ CHAT_DLQ=chat.wallet-events.dlq
 SCENARIOS=(chat-db-outage poison-message broker-outage)
 describe() {
   case $1 in
-    chat-db-outage) echo "The chat database goes down while a payment happens. The chat's consumer fails, the failure is classified as transient, the event is retried with backoff, and after the database returns the payment bubble appears exactly once. Nothing is dead-lettered." ;;
+    chat-db-outage) echo "The chat database goes down while a payment happens. The chat service must stay up (/health 200, /ready 503). Its consumer fails, the failure is classified as transient, the event is retried with backoff, and after the database returns the payment bubble appears exactly once. Nothing is dead-lettered." ;;
     poison-message) echo "Two unreadable messages (broken JSON, wrong types) are put on the chat's queue. They are dead-lettered at once with the error in their headers, never retried, and a normal payment right after is still delivered exactly once." ;;
     broker-outage)  echo "RabbitMQ goes down while a payment happens. Money still moves (the wallet does not need the broker) and the event waits in the wallet's outbox. After the broker returns the wallet's timer republishes it, the chat and the store consumers reconnect by themselves, and the payment bubble appears exactly once (allow up to ~2 minutes)." ;;
   esac
@@ -73,6 +73,9 @@ call() {   # call METHOD URL TOKEN [JSON]  ->  STATUS and BODY
 balance() { call GET "$WALLET/api/v1/wallet" "$1"; echo "$BODY" | json 'd["balanceMinor"]'; }
 wait_for() { local secs=$1; shift; local i; for ((i=0; i<secs; i++)); do "$@" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
 quiet() { "$@" >/dev/null 2>&1; }
+http_code() { curl -s -o /dev/null -w '%{http_code}' -m 5 "$1"; }
+# The service under test must SURVIVE the outage: a crashed process is the failure this script exists to catch.
+still_up() { [ "$(http_code "$CHAT/health")" = 200 ] && pass "chat-service is still running $1" || bad "chat-service is still running $1" "it crashed (see its terminal): an outage must never kill it"; }
 
 rq() { curl -s -m 10 -u "$RABBIT_USER:$RABBIT_PASS" "$@"; }
 queue_field() { rq "$RABBIT/api/queues/%2F/$1" | json "d.get('$2', 0)"; }
@@ -141,9 +144,12 @@ scenario_chat_db_outage() {
   local a b; a=$(balance "$ALICE"); b=$(balance "$BOB")
   pass "the payment was confirmed while the chat database was down (money does not depend on the chat)"
   sleep 3                                              # let the chat consumer fail at least once and park the event in a retry queue
+  still_up "while its database is down"
+  [ "$(http_code "$CHAT/ready")" = 503 ] && pass "...and reports itself not ready (/ready is 503), alive but unable to serve" || bad "/ready is 503 while the database is down" "got $(http_code "$CHAT/ready"); an older chat build has no /ready"
   echo "  starting chat-db"; quiet $DC start chat-db
   wait_for 60 pg_ready || { bad "chat-db came back"; return; }
 
+  wait_for 30 eval '[ "$(http_code "$CHAT/ready")" = 200 ]' && pass "chat-service is ready again once the database is back" || bad "chat-service is ready again once the database is back" "/ready is $(http_code "$CHAT/ready")"
   if wait_for 90 bubbles_are 1; then pass "the payment bubble appeared after the database returned"
   else bad "the payment bubble appeared after the database returned" "bubbles: $(bubble_count); dead letters: $(published_total "$CHAT_DLQ") (before: $dead0). If it was dead-lettered the outage outlasted the retry window (~60s): see docs/events.md"; return; fi
   sleep 8
@@ -187,6 +193,7 @@ for m in json.load(sys.stdin):
   wait_for 45 bubbles_are 1 && pass "a normal payment right after the junk is delivered (the queue was not blocked)" || bad "a normal payment right after the junk is delivered" "bubbles: $(bubble_count)"
   sleep 6; [ "$(bubble_count)" = 1 ] && pass "...exactly once" || bad "exactly one bubble" "now $(bubble_count)"
   rq -X DELETE "$RABBIT/api/queues/%2F/$CHAT_DLQ/contents" >/dev/null && echo "  (removed the two junk dead letters)"
+  still_up "after the junk messages"
 }
 
 # ---------------------------------------------------------------- scenario 3
@@ -196,6 +203,7 @@ scenario_broker_outage() {
   echo "  stopping rabbitmq"; quiet $DC stop rabbitmq
   pay || return
   pass "the payment was confirmed while RabbitMQ was down (the wallet does not need the broker to move money)"
+  sleep 3; still_up "while RabbitMQ is down"
   local outbox1; outbox1=$(wallet_unpublished)
   if [ -n "$outbox0" ] && [ -n "$outbox1" ]; then
     [ "$outbox1" -gt "$outbox0" ] && pass "the event is safe in the wallet's outbox ($outbox0 -> $outbox1 unpublished)" || bad "the event is stored in the wallet's outbox" "unpublished events: $outbox0 -> $outbox1"

@@ -58,6 +58,7 @@ The wallet consumes nothing from RabbitMQ.
 | wallet-service | RabbitMQ down when publishing | event stays in `event_publication`; republished by the timer (and at restart) |
 | store-backend relay | RabbitMQ down | rows stay unpublished; the relay reconnects with backoff and sends them when the broker is back |
 | any consumer | down for a while | the durable queue keeps the messages until it is back |
+| chat-service | its database or RabbitMQ goes away | the process stays up: the Postgres pool listens for lost connections and reconnects on the next query; the AMQP loop rebuilds the session (1s, 2s ... 30s) on connection or channel loss; HTTP answers `503` + `Retry-After` and Socket.IO acks `SERVICE_UNAVAILABLE`. `/health` stays 200 (alive), `/ready` is 503 until the database answers. Started before its database, it waits for it. |
 
 ## Retry and dead-letter topology (chat-service)
     <exchange> --routing keys--> chat.<x>-events --transient error--> chat.<x>-events.retry.<delay>ms   (one per backoff step, TTL = delay)

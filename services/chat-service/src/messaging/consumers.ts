@@ -1,8 +1,9 @@
 import amqp from 'amqplib';
 import { z } from 'zod';
 import type { ChatService } from '../core/chat-service';
-import { type Handler, startConsumer } from './consumer-runner';
-import { type RetryPolicy, retryPolicyFromEnv } from './retry-policy';
+import { type Handler, type RunnerChannel, startConsumer } from './consumer-runner';
+import type { Log } from '../resilience/process-guards';
+import { type RetryPolicy, reconnectDelayMs, retryPolicyFromEnv } from './retry-policy';
 import type { ConsumerSpec } from './topology';
 
 export const TransferCompleted = z.object({
@@ -72,35 +73,72 @@ export function startEventConsumers(cfg: BrokerConfig, chat: ChatService, policy
       },
     },
   ];
-  void connectLoop(cfg.url, bindings, policy);
+  connectLoop(cfg.url, bindings, policy).catch((err) => console.error('[events] the connection loop stopped unexpectedly', err));
 }
 
-async function connectLoop(url: string, bindings: Binding[], policy: RetryPolicy) {
-  for (;;) {
-    let conn: Awaited<ReturnType<typeof amqp.connect>> | undefined;
+export interface ChannelHandle extends RunnerChannel {
+  prefetch(count: number): Promise<unknown> | unknown;
+  on(event: string, listener: (...args: any[]) => void): unknown;
+}
+
+export interface AmqpConnectionLike {
+  createConfirmChannel(): Promise<ChannelHandle>;
+  close(): Promise<void>;
+  on(event: string, listener: (...args: any[]) => void): unknown;
+}
+
+export interface LoopDeps {
+  connect?: (url: string) => Promise<AmqpConnectionLike>;
+  sleep?: (ms: number) => Promise<void>;
+  log?: Log;
+  /** Lets a test end the loop; in production it runs forever. */
+  stop?: AbortSignal;
+}
+
+/**
+ * Keeps the consumers running across RabbitMQ outages, forever:
+ *  - cannot connect: log it, wait 1s, 2s, 4s ... 30s, try again (the wait restarts from 1s once a session worked);
+ *  - the CONNECTION or just the CHANNEL is lost mid-session (broker restart, a server-side channel close): tear everything down and start over,
+ *    so the consumers are never left silently dead on a half-open connection;
+ *  - 'error' events on the connection and the channel are listened to: an emitter without an 'error' listener throws, which would kill the process.
+ */
+export async function connectLoop(url: string, bindings: Binding[], policy: RetryPolicy, deps: LoopDeps = {}): Promise<void> {
+  const connect = deps.connect ?? ((u: string) => amqp.connect(u) as unknown as Promise<AmqpConnectionLike>);
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const log = deps.log ?? console;
+  let failures = 0;
+
+  while (!deps.stop?.aborted) {
+    let conn: AmqpConnectionLike | undefined;
     try {
-      conn = await amqp.connect(url);
-      const channel = await conn.createConfirmChannel();      // publisher confirms: a failed message is only acked once its copy is safely stored
+      conn = await connect(url);
+      let lose!: (why: string) => void;
+      const lost = new Promise<string>((resolve) => { lose = resolve; });
+      conn.on('error', (e: Error) => log.warn(`[events] connection error: ${e.message}`));
+      conn.on('close', () => lose('the connection closed'));
+      const channel = await conn.createConfirmChannel();        // publisher confirms: a failed message is only acked once its copy is safely stored
+      channel.on('error', (e: Error) => log.warn(`[events] channel error: ${e.message}`));
+      channel.on('close', () => lose('the channel closed'));
       await channel.prefetch(10);
       for (const b of bindings) {
         const names = await startConsumer(channel, b, b.handle, { policy });
-        console.log(`[events] consuming ${b.queue} <- ${b.exchange} (${b.routingKeys.join(', ')}); retries: ${names.retryQueues.map((r) => r.delayMs + 'ms').join(', ')}; dead letters: ${names.dlq}`);
+        log.info(`[events] consuming ${b.queue} <- ${b.exchange} (${b.routingKeys.join(', ')}); retries: ${names.retryQueues.map((r) => r.delayMs + 'ms').join(', ')}; dead letters: ${names.dlq}`);
       }
-      const open = conn;
-      await new Promise<void>((resolve) => {
-        open.on('close', () => { console.error('[events] connection closed, reconnecting'); resolve(); });
-        open.on('error', (e: Error) => console.error('[events] connection error', e.message));
-      });
+      failures = 0;
+      log.warn(`[events] ${await lost}; reconnecting`);
     } catch (err) {
+      failures++;
       const message = (err as Error).message;
       if (/PRECONDITION/i.test(message)) {
-        console.error('[events] A queue already exists with different settings (it was created before dead-lettering was added). '
+        log.error('[events] A queue already exists with different settings (it was created before dead-lettering was added). '
           + 'Delete the chat queues once and restart: scripts/reset-chat-queues.sh --yes. Details: ' + message);
       } else {
-        console.error('[events] connect failed, retrying in 5s:', message);
+        log.warn(`[events] cannot reach RabbitMQ (${message}); retrying in ${reconnectDelayMs(failures)}ms`);
       }
+    } finally {
       await conn?.close().catch(() => undefined);
     }
-    await new Promise((r) => setTimeout(r, 5000));
+    if (deps.stop?.aborted) return;
+    await sleep(reconnectDelayMs(Math.max(failures, 1)));
   }
 }

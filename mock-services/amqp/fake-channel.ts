@@ -5,6 +5,7 @@
  * integration test (services/chat-service/tests/messaging.integration.test.ts) against a real broker.
  * Used by: services/chat-service/tests/consumer-runner.test.ts
  */
+import { EventEmitter } from 'node:events';
 import type { ConsumeMessage, GetMessage, Options } from 'amqplib';
 
 export interface Published {
@@ -16,7 +17,7 @@ export interface Published {
 
 export interface Binding { queue: string; exchange: string; pattern: string }
 
-export class FakeChannel {
+export class FakeChannel extends EventEmitter {
   exchanges = new Map<string, { type: string; options: Record<string, unknown> }>();
   queues = new Map<string, Record<string, unknown>>();
   bindings: Binding[] = [];
@@ -34,6 +35,7 @@ export class FakeChannel {
   async assertExchange(exchange: string, type: string, options: Record<string, unknown> = {}) { this.exchanges.set(exchange, { type, options }); }
   async assertQueue(queue: string, options: Record<string, unknown> = {}) { this.queues.set(queue, options); }
   async bindQueue(queue: string, exchange: string, pattern: string) { this.bindings.push({ queue, exchange, pattern }); }
+  async prefetch(_count: number) { /* nothing to limit in memory */ }
   async consume(queue: string, onMessage: (msg: ConsumeMessage | null) => void) { this.consumers.set(queue, onMessage); }
 
   ack(msg: ConsumeMessage) { this.acked.push(msg); this.pending.delete(msg.fields.deliveryTag); }

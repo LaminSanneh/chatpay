@@ -5,6 +5,7 @@ import { ChatError } from '../core/errors';
 import type { TokenVerifier } from '../core/ports';
 import type { ChatService } from '../core/chat-service';
 import type { Identity } from '../core/types';
+import { isDependencyOutage } from '../messaging/retry-policy';
 
 const userChannel = (userId: string) => `user:${userId}`;
 
@@ -89,6 +90,7 @@ export function attachSocketGateway(
 function toWireError(err: unknown) {
   if (err instanceof ChatError) return { code: err.code, message: err.message };
   if (err instanceof z.ZodError) return { code: 'VALIDATION_FAILED', message: err.issues[0]?.message ?? 'invalid payload' };
+  if (isDependencyOutage(err)) return { code: 'SERVICE_UNAVAILABLE', message: 'Temporarily unavailable, please retry shortly' };
   console.error('[ws] unhandled', err);
   return { code: 'INTERNAL', message: 'Internal error' };
 }

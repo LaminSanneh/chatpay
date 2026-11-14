@@ -35,7 +35,7 @@ describe('list', () => {
     assert.equal(letters.length, 2);
     assert.deepEqual({ ...letters[0], bytes: 0 }, {
       position: 1, originalQueue: MAIN, originalRoutingKey: 'transfer.completed', failureKind: 'transient', errorClass: 'Error', error: 'db down',
-      retryCount: 5, replayCount: 0, firstFailedAt: '2026-12-01T10:00:00.000Z', failedAt: '2026-12-01T10:01:00.000Z', messageId: undefined, bytes: 0, preview: '{"n":1}',
+      retryCount: 5, replayCount: 0, firstFailedAt: '2026-12-01T10:00:00.000Z', failedAt: '2026-12-01T10:01:00.000Z', messageId: undefined, correlationId: undefined, bytes: 0, preview: '{"n":1}',
     });
     assert.equal(letters[1].replayCount, 2);
     assert.equal(ch.depth(DLQ), 2, 'listing changes nothing');

@@ -8,5 +8,6 @@
   "amountMinor": 2500,
   "commissionMinor": 0,
   "currency": "GMD",
-  "occurredAt": "2026-11-19T09:05:00.750Z"
+  "occurredAt": "2026-11-19T09:05:00.750Z",
+  "correlationId": "e5a7c9b1-4d2f-4863-9a0b-1c3e5a7b9c20"
 }

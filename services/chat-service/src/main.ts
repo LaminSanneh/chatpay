@@ -9,6 +9,7 @@ import { JoseTokenVerifier } from './auth/jwt-verifier';
 import { ChatService } from './core/chat-service';
 import { createHttpApp } from './http/app';
 import { startEventConsumers } from './messaging/consumers';
+import { installCorrelatedConsole } from './observability/correlation';
 import { installProcessGuards } from './resilience/process-guards';
 import { attachSocketGateway } from './ws/gateway';
 
@@ -18,6 +19,7 @@ import { attachSocketGateway } from './ws/gateway';
  * To embed the chat in another app, import ChatService + the adapters you need and skip this file.
  */
 async function main() {
+  installCorrelatedConsole();                    // every log line written while handling a request or message carries [cid=...]
   installProcessGuards();
   const port = Number(process.env.PORT ?? 4000);
   const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(',').map((s) => s.trim());

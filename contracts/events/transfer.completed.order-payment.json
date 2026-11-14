@@ -10,5 +10,6 @@
   "note": "Order 4e7a1c52",
   "referenceType": "order",
   "referenceId": "4e7a1c52-9d3b-4a6f-8b2e-5c1d0f9a8b7c",
-  "occurredAt": "2026-11-12T10:16:02.250Z"
+  "occurredAt": "2026-11-12T10:16:02.250Z",
+  "correlationId": "3b9e5d17-2c8a-4f60-a1d4-9e7c6b5a4d30"
 }

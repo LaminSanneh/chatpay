@@ -2,5 +2,6 @@
   "ownerUserId": "22222222-2222-4222-8222-222222222222",
   "storeId": "7",
   "version": 1,
-  "occurredAt": "2026-11-12T10:30:00+00:00"
+  "occurredAt": "2026-11-12T10:30:00+00:00",
+  "correlationId": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e"
 }

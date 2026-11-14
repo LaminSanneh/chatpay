@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\Correlation;
 use App\Models\Order;
 use App\Services\OrderService;
 use Illuminate\Console\Command;
@@ -15,7 +16,7 @@ class ExpireOrders extends Command
     {
         $count = 0;
         Order::query()->where('status', Order::PENDING)->where('expires_at', '<', now())->each(function (Order $order) use ($orders, &$count) {
-            $orders->cancel($order);
+            Correlation::within(null, fn () => $orders->cancel($order));      // each expiry has its own id
             $count++;
         });
         $this->info("Expired {$count} unpaid orders");

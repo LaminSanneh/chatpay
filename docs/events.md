@@ -75,6 +75,9 @@ The store backend's consumer follows the same pattern for `store.wallet-events` 
 
 Shape of every event: `contracts/events/` (shared fixtures that each producer and consumer tests against).
 
+## Correlation ids
+Every request and message carries a correlation id. HTTP: `X-Correlation-Id` (taken from the request or generated, returned on every response, sent by the store on every call to the wallet). Events: the id is stored INSIDE the event (`correlationId`, see `contracts/events/`) and sent as the AMQP header `x-correlation-id`; a consumer that publishes a follow-up event reuses it, so `transfer.completed` -> `order.paid` is one id. Retry copies and dead letters keep the header, `dlq:list` shows it, and every log line written while handling a request or message is tagged with it (`[cid=...]` in the wallet and chat, `correlation_id` in the Laravel log context). To follow a payment, search every service's log for its id. Real-stack check: `make e2e-correlation`.
+
 ## Dead-letter queues: how to think about them
 A dead-letter queue is a quarantine, not a retry mechanism. Messages land there when a consumer rejects them, expires them, or a queue overflows.
 1. **Sort failures into two kinds.** Transient (database or network briefly down): retry, after a delay, a limited number of times. Permanent (malformed payload,

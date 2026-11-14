@@ -2,6 +2,8 @@
 
 namespace App\Messaging;
 
+use App\Support\Correlation;
+
 /**
  * One delivery, start to finish. Never throws, never loses the message:
  *   handler succeeds                       -> ack
@@ -21,6 +23,7 @@ final class MessageProcessor
     public const H_STACK = 'x-error-stack';
     public const H_FIRST_FAILED = 'x-first-failed-at';
     public const H_FAILED = 'x-failed-at';
+    public const H_CORRELATION = Correlation::AMQP_HEADER;
 
     /**
      * @param callable(string, array): void $handler  receives the ORIGINAL routing key and the decoded payload
@@ -31,6 +34,26 @@ final class MessageProcessor
     public static function process(
         ChannelPort $ch, Delivery $delivery, callable $handler, array $names, RetryPolicy $policy,
         ?callable $log = null, ?callable $now = null, int $requeueDelayMs = 1000,
+    ): void {
+        // The whole delivery (the handler, every log line, the events it publishes, the retry or dead-letter copy) runs under the id the message arrived with.
+        Correlation::within(self::correlationOf($delivery), static fn () => self::processDelivery($ch, $delivery, $handler, $names, $policy, $log, $now, $requeueDelayMs));
+    }
+
+    /** The id a message was published with: its x-correlation-id header, else a correlationId field in its JSON body, else none (a new one is made). */
+    public static function correlationOf(Delivery $delivery): ?string
+    {
+        $fromHeader = Correlation::sanitize($delivery->headers[Correlation::AMQP_HEADER] ?? null);
+        if ($fromHeader !== null) {
+            return $fromHeader;
+        }
+        $payload = json_decode($delivery->body, true);
+
+        return is_array($payload) ? Correlation::sanitize($payload['correlationId'] ?? null) : null;
+    }
+
+    private static function processDelivery(
+        ChannelPort $ch, Delivery $delivery, callable $handler, array $names, RetryPolicy $policy,
+        ?callable $log, ?callable $now, int $requeueDelayMs,
     ): void {
         $log ??= static fn (string $m) => null;
         $retriesDone = (int) ($delivery->headers[self::H_RETRY_COUNT] ?? 0);
@@ -58,6 +81,7 @@ final class MessageProcessor
                 self::H_STACK => mb_substr($e->getTraceAsString(), 0, 2000),
                 self::H_FIRST_FAILED => (string) ($delivery->headers[self::H_FIRST_FAILED] ?? $at),
                 self::H_FAILED => $at,
+                self::H_CORRELATION => Correlation::current(),
             ]);
 
             try {

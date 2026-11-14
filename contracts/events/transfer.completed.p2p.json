@@ -10,5 +10,6 @@
   "note": "lunch",
   "referenceType": "chat",
   "referenceId": "7c1f0e9a-2b3d-4c5e-8f6a-9b0c1d2e3f40",
-  "occurredAt": "2026-11-12T10:15:30.123456Z"
+  "occurredAt": "2026-11-12T10:15:30.123456Z",
+  "correlationId": "c0a8f3d2-7e41-4b9a-9d6c-5f1e2a3b4c5d"
 }

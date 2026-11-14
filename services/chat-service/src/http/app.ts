@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import { ChatError } from '../core/errors';
+import { correlationMiddleware, CORRELATION_RESPONSE_HEADER } from '../observability/correlation';
 import { isDependencyOutage } from '../messaging/retry-policy';
 import type { TokenVerifier } from '../core/ports';
 import type { ChatService } from '../core/chat-service';
@@ -23,7 +24,8 @@ const param = (req: Request, name: string) => String(req.params[name]);
 
 export function createHttpApp({ chat, verifier, corsOrigins, ready }: HttpDeps) {
   const app = express();
-  app.use(cors({ origin: corsOrigins }));
+  app.use(correlationMiddleware);                                                   // first: every log line and every response of this request carries the id
+  app.use(cors({ origin: corsOrigins, exposedHeaders: [CORRELATION_RESPONSE_HEADER] }));   // browsers may read it, to quote it in a bug report
   app.use(express.json({ limit: '32kb' }));
 
   // Liveness: the process is up (stays 200 during a database outage, so an orchestrator does not restart a healthy service).

@@ -18,6 +18,8 @@ A **dead letter** is an event a consumer could not process: either it can never 
 Each entry shows `transient` or `permanent`, how many retries it had, when it failed, the original queue and routing key, the error class and message, and the start of the body. Listing changes nothing.
 The full failure detail (stack, first and last failure time) is in the message headers: RabbitMQ management UI -> Queues -> the queue -> Get messages.
 
+The `cid=` shown for each entry is the correlation id of the request that caused the event: search the logs of the wallet, store and chat for it to see the whole story (what the user did, which services handled it, where it failed).
+
 ## 3. Decide
 | What you see | Meaning | Do |
 |---|---|---|

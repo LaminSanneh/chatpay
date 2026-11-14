@@ -1,4 +1,5 @@
 import type { ConsumeMessage, Options } from 'amqplib';
+import { correlationOf, createCorrelatedLogger, currentCorrelationId, runWithCorrelation } from '../observability/correlation';
 import { classifyError, delayForRetry, describeError, type RetryPolicy } from './retry-policy';
 import { assertTopology, DEAD_LETTER_EXCHANGE, type ConsumerSpec, type QueueNames, retryQueueFor, type TopologyChannel } from './topology';
 
@@ -38,13 +39,10 @@ export const H = {
   errorStack: 'x-error-stack',
   firstFailedAt: 'x-first-failed-at',
   failedAt: 'x-failed-at',
+  correlationId: 'x-correlation-id',
 } as const;
 
-const consoleLogger: Logger = {
-  info: (m) => console.log(m),
-  warn: (m, d) => console.warn(m, d ?? ''),
-  error: (m, d) => console.error(m, d ?? ''),
-};
+const consoleLogger: Logger = createCorrelatedLogger();
 
 /** Declares the topology, then handles every message of the queue with retry and dead-lettering. */
 export async function startConsumer(ch: RunnerChannel, spec: ConsumerSpec, handler: Handler, opts: RunnerOptions): Promise<QueueNames> {
@@ -62,7 +60,14 @@ export async function startConsumer(ch: RunnerChannel, spec: ConsumerSpec, handl
  *   fails, permanent or retries used up      -> copy to the dead-letter exchange with the error in headers (confirmed), then ack the original
  *   the copy itself cannot be published      -> give the original back to the queue (nack with requeue), so nothing is dropped
  */
-export async function processMessage(
+export function processMessage(
+  ch: RunnerChannel, spec: ConsumerSpec, names: QueueNames, handler: Handler, opts: RunnerOptions, msg: ConsumeMessage,
+): Promise<void> {
+  // The whole delivery (the handler, every log line, the retry or dead-letter copy) runs under the id the message arrived with.
+  return runWithCorrelation(correlationOf(msg), () => processDelivery(ch, spec, names, handler, opts, msg));
+}
+
+async function processDelivery(
   ch: RunnerChannel, spec: ConsumerSpec, names: QueueNames, handler: Handler, opts: RunnerOptions, msg: ConsumeMessage,
 ): Promise<void> {
   const log = opts.log ?? consoleLogger;
@@ -88,6 +93,7 @@ export async function processMessage(
       [H.errorStack]: error.stack,
       [H.firstFailedAt]: String(headers[H.firstFailedAt] ?? now),
       [H.failedAt]: now,
+      [H.correlationId]: currentCorrelationId(),
     };
     const publishOptions = (extra: Record<string, unknown>): Options.Publish => ({
       persistent: true,

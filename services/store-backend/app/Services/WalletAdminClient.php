@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Correlation;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -35,12 +36,12 @@ class WalletAdminClient
 
     private function get(string $path, array $query = []): array
     {
-        return $this->handle(Http::withToken($this->tokens->accessToken())->acceptJson()->timeout(10)->get($this->url($path), $query));
+        return $this->handle(Http::withToken($this->tokens->accessToken())->acceptJson()->timeout(10)->withHeaders([Correlation::HEADER => Correlation::currentOrNew()])->get($this->url($path), $query));
     }
 
     private function post(string $path, array $json): array
     {
-        return $this->handle(Http::withToken($this->tokens->accessToken())->acceptJson()->timeout(10)->post($this->url($path), $json));
+        return $this->handle(Http::withToken($this->tokens->accessToken())->acceptJson()->timeout(10)->withHeaders([Correlation::HEADER => Correlation::currentOrNew()])->post($this->url($path), $json));
     }
 
     private function url(string $path): string

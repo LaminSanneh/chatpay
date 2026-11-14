@@ -26,6 +26,7 @@ export interface DeadLetter {
   firstFailedAt?: string;
   failedAt?: string;
   messageId?: string;
+  correlationId?: string;
   bytes: number;
   preview: string;
 }
@@ -50,6 +51,7 @@ export function summarize(msg: Message, position: number): DeadLetter {
     firstFailedAt: text(h[H.firstFailedAt]),
     failedAt: text(h[H.failedAt]),
     messageId: text(msg.properties.messageId),
+    correlationId: text(h[H.correlationId]),
     bytes: msg.content.length,
     preview: body.length > 120 ? body.slice(0, 117) + '...' : body,
   };

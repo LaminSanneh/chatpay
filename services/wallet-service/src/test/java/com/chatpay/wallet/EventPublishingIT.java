@@ -25,6 +25,8 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -47,7 +49,7 @@ class EventPublishingIT extends OrderWalletIntegrationTest {
     @Autowired AmqpAdmin amqp;
     @Autowired RabbitTemplate rabbit;
 
-    private record Received(String routingKey, JsonNode body) {}
+    private record Received(String routingKey, JsonNode body, Map<String, Object> headers) {}
 
     private final List<Received> received = new ArrayList<>();
     private String queue;
@@ -72,7 +74,7 @@ class EventPublishingIT extends OrderWalletIntegrationTest {
         Message message;
         while ((message = rabbit.receive(queue, 300)) != null) {
             try {
-                received.add(new Received(message.getMessageProperties().getReceivedRoutingKey(), json.readTree(message.getBody())));
+                received.add(new Received(message.getMessageProperties().getReceivedRoutingKey(), json.readTree(message.getBody()), message.getMessageProperties().getHeaders()));
             } catch (IOException e) {
                 throw new IllegalStateException("an event was not valid JSON", e);
             }
@@ -250,5 +252,51 @@ class EventPublishingIT extends OrderWalletIntegrationTest {
 
     private void assertSameShape(String fixture, JsonNode actual) {
         assertThat(Contracts.shapeDifferences(Contracts.load(fixture), actual)).as("%s versus the message on the broker", fixture).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ correlation ids
+    private Response confirmWithCorrelationId(String user, String intentId, String correlationId) {
+        try {
+            MockHttpServletResponse response = mvc.perform(MockMvcRequestBuilders.post("/api/v1/transfer-intents/" + intentId + "/confirm")
+                    .header("Authorization", "Bearer " + as(user)).header("X-Correlation-Id", correlationId)).andReturn().getResponse();
+            assertThat(response.getHeader("X-Correlation-Id")).as("the response echoes the id").isEqualTo(correlationId);
+            return new Response(response.getStatus(), json.readTree(response.getContentAsString()));
+        } catch (Exception e) {
+            throw new IllegalStateException("confirm failed", e);
+        }
+    }
+
+    @Test
+    void theCorrelationIdOfTheRequestTravelsOnTheMessageAndInsideIt() {
+        String alice = newUser(), bob = newUser();
+        String correlationId = "it-corr-" + UUID.randomUUID().toString().substring(0, 8);
+        topUp(alice, 5_000);
+        String intentId = createIntent(alice, bob, 700, "traced").text("id");
+
+        Response confirmed = confirmWithCorrelationId(alice, intentId, correlationId);
+        Received event = awaitEvent("transfer.completed", b -> b.path("intentId").asText().equals(intentId));
+
+        assertThat(confirmed.status()).isEqualTo(200);
+        assertThat(event.headers()).as("AMQP header").containsEntry("x-correlation-id", correlationId);
+        assertThat(event.body().path("correlationId").asText()).as("stored with the event itself").isEqualTo(correlationId);
+    }
+
+    @Test
+    void aRequestWithoutAnIdGetsOneAndTheEventCarriesThatSameId() {
+        String alice = newUser(), bob = newUser();
+        topUp(alice, 5_000);
+        String intentId = createIntent(alice, bob, 300, "untraced").text("id");
+
+        Received event = null;
+        try {
+            MockHttpServletResponse response = mvc.perform(MockMvcRequestBuilders.post("/api/v1/transfer-intents/" + intentId + "/confirm")
+                    .header("Authorization", "Bearer " + as(alice))).andReturn().getResponse();
+            String generated = response.getHeader("X-Correlation-Id");
+            event = awaitEvent("transfer.completed", b -> b.path("intentId").asText().equals(intentId));
+            assertThat(generated).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+            assertThat(event.headers()).containsEntry("x-correlation-id", generated);
+        } catch (Exception e) {
+            throw new IllegalStateException("confirm failed", e);
+        }
     }
 }

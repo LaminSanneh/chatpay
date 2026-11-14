@@ -1,6 +1,7 @@
 package com.chatpay.wallet.transfer.internal;
 
 import com.chatpay.wallet.account.AccountApi;
+import com.chatpay.wallet.shared.Correlation;
 import com.chatpay.wallet.account.AccountView;
 import com.chatpay.wallet.ledger.Direction;
 import com.chatpay.wallet.ledger.LedgerApi;
@@ -156,7 +157,8 @@ class TransferIntentService {
         intent.markCompleted(t.getId());
 
         events.publishEvent(new TransferCompleted(1, t.getId(), intent.getId(), t.getKind(), userId, intent.getToUserId(),
-                amount, intent.getCurrency(), intent.getNote(), intent.getReferenceType(), intent.getReferenceId(), Instant.now()));
+                amount, intent.getCurrency(), intent.getNote(), intent.getReferenceType(), intent.getReferenceId(), Instant.now(),
+                Correlation.currentOrNew()));
 
         return IntentView.of(intent, now);
     }

@@ -68,43 +68,45 @@ How things were checked so far:
 - [x] setup.sh fixes found on a real machine: false "missing extension" reports (`pipefail` + `grep -q` race), the skeleton's SQLite `.env` winning over ours, leftover `_skeleton` folder, `.env` is not an INI file
 - [x] Rate limits authenticate first and are per signed-in person (an anonymous call can no longer use up the quota); verify.sh now prints the HTTP status it got
 
-## "Next: messaging reliability" (found while mapping the events, see docs/events.md)
+## Next: messaging reliability (found while mapping the events, see docs/events.md)
 - [x] Chat consumers retry transient errors with exponential backoff, then dead-letter; permanent errors dead-letter at once; nothing is discarded (retry queues + `chat.dlx` + `<queue>.dlq`; unit tests, plus a real-broker integration test that runs under `make test-chat` and in CI)
 - [x] Store backend consumer: retry with backoff, dead-letter, reconnect by itself (`app/Messaging`; unit tests run standalone, the glue is verified by `scripts/e2e-resilience.sh`)
 - [x] Dead-letter tool: `npm run dlq:list` / `dlq:replay` in services/chat-service (works for the store's DLQ too) and `docs/runbooks/dead-letters.md`
 - [ ] Alert when any DLQ depth is above zero; alert when `outbox_events` / `event_publication` rows stay unpublished for more than a few minutes
-- [x] Wallet: `OutboxSweeper` republishes incomplete events every 30s, not only at restart **(unit-tested; proven end to end only by e2e-resilience.sh broker-outage)**
+- [x] Wallet: `OutboxSweeper` republishes incomplete events every 30s, not only at restart **(proven end to end by e2e-resilience.sh broker-outage, as reported)**
 - [x] Store relay reconnects with backoff and reports how many events are waiting (it no longer exits, so `dev.sh` is enough)
 - [ ] Store outbox: per-row failure counters and the last error (needs a migration), shown by `make doctor`
 - [x] Failure reason recorded in headers of every dead letter (chat and store)
 - [x] Event contracts: shared fixtures in `contracts/events/` with rules (only add fields, bump `version` for breaking changes), tested by the wallet, store, chat and `make check`
-- [x] `scripts/e2e-resilience.sh`: chat database outage, poison messages, RabbitMQ outage, each asserting exactly-once delivery **(written; needs a first run on the real stack)**
+- [x] `scripts/e2e-resilience.sh`: chat database outage, poison messages, RabbitMQ outage, each asserting exactly-once delivery **(22/22 checks pass on the real stack, as reported)**
 - [x] chat-service survives database and RabbitMQ outages: pool error listener + timeouts, startup wait for the database, AMQP connection loop that rebuilds on connection OR channel loss, process guards, 503 + Retry-After and `/ready` (alongside `/health`), ack failures no longer mistaken for handler failures (24 tests; `make e2e-resilience` checks the process stays up)
 - [ ] Alerting: something that runs `make doctor` on a schedule and tells a person when a dead-letter queue is not empty
-- [ ] Correlation ids: one id from the HTTP request through the outbox event to the consumer's log lines
+- [x] Correlation ids: `X-Correlation-Id` accepted or generated at every HTTP entry, returned on every response (also errors), bound to the log context (Spring MDC, Laravel `Log::withContext`, Node `AsyncLocalStorage`), sent by the store to the wallet, stored inside each event and sent as `x-correlation-id`, reused by consumers for follow-up events, kept on retry copies and dead letters **(chat and store logic: unit-tested; wallet Java: written, not yet compiled; real-stack proof: `make e2e-correlation`, not yet run)**
+- [ ] Correlation ids: send one from the web apps and show it in error messages; keep it on chat messages and orders for support lookups
 
-## Next: run it end to end
-- [ ] `docker compose up -d` (Keycloak :8080, wallet DB :5433, chat DB :5434, RabbitMQ :5672)
-- [ ] `cd services/wallet-service && mvn verify`, fix compile nits, then `mvn spring-boot:run`
-- [ ] `cd services/chat-service && cp .env.example .env && npm i && npm run dev` (applies chat migrations)
-- [ ] `cd apps/web && cp .env.example .env.local && npm i && npm run dev`
-- [ ] `cd services/store-backend && ./setup.sh`, then `php artisan serve --port=8000`, `events:consume`, `outbox:relay`, `schedule:work` (separate terminals)
-- [ ] `cd apps/store-web && cp .env.example .env.local && npm i && npm run dev` (port 3001)
-- [ ] Two browsers (alice, bob): DM, create a private group with invites, accept, @mention, watch unread badges and typing
-- [ ] Alice tops up, pays Bob: bubble for both, both balances change, statement shows the entries
-- [ ] Confirm the same intent twice (curl): one payment. Let one expire: 409 `INTENT_EXPIRED`
-- [ ] Merchant flow with curl (root README): create order intent as `laravel-service`, confirm as the buyer, release, refund
-- [ ] Admin flow with curl: finance1 requests a reversal, finance1 approving it is refused, finance2 approves it, reconciliation is empty
-- [ ] Store: sign in to /admin as admin1 and /vendor as bob; edit a product; check that `store.opened` reaches chat (store icon next to bob)
-- [ ] Storefront: browse anonymously, add to cart, sign in (no password prompt if already signed in on chat), checkout, confirm payment, see the order become `paid`
-- [ ] Chat: open the Shop, buy for yourself, then buy for the person in a 1:1 chat: gift bubble appears for both
+## Done: run it end to end
+Ticked on the project owner's report that the runbook stages 1-6, `e2e.sh` (32/32), the browser flows and `make e2e-resilience` (22/22) pass. Two items below have automated coverage (OrderFulfilmentTest, OrderPaymentEventsTest, the wallet ITs) but no manual run has been reported, so they stay open.
+- [x] `docker compose up -d` (Keycloak :8080, wallet DB :5433, chat DB :5434, RabbitMQ :5672)
+- [x] `cd services/wallet-service && mvn verify`, fix compile nits, then `mvn spring-boot:run`
+- [x] `cd services/chat-service && cp .env.example .env && npm i && npm run dev` (applies chat migrations)
+- [x] `cd apps/web && cp .env.example .env.local && npm i && npm run dev`
+- [x] `cd services/store-backend && ./setup.sh`, then `php artisan serve --port=8000`, `events:consume`, `outbox:relay`, `schedule:work` (separate terminals)
+- [x] `cd apps/store-web && cp .env.example .env.local && npm i && npm run dev` (port 3001)
+- [x] Two browsers (alice, bob): DM, create a private group with invites, accept, @mention, watch unread badges and typing
+- [x] Alice tops up, pays Bob: bubble for both, both balances change, statement shows the entries
+- [x] Confirm the same intent twice (curl): one payment. Let one expire: 409 `INTENT_EXPIRED`
+- [x] Merchant flow with curl (root README): create order intent as `laravel-service`, confirm as the buyer, release, refund
+- [x] Admin flow with curl: finance1 requests a reversal, finance1 approving it is refused, finance2 approves it, reconciliation is empty
+- [x] Store: sign in to /admin as admin1 and /vendor as bob; edit a product; check that `store.opened` reaches chat (store icon next to bob)
+- [x] Storefront: browse anonymously, add to cart, sign in (no password prompt if already signed in on chat), checkout, confirm payment, see the order become `paid`
+- [x] Chat: open the Shop, buy for yourself, then buy for the person in a 1:1 chat: gift bubble appears for both
 - [ ] Order lifecycle: vendor ships and delivers in /vendor, `orders:settle` pays out (store account credited, commission to platform-revenue); refund an escrowed order from /admin
 - [ ] Late payment: let an order expire, confirm its payment anyway, check it is refunded automatically
-- [ ] Wallet corrections in /admin as finance1 (request) and finance2 (approve); finance1 approving is refused
-- [ ] Stop chat-service, pay, restart it: bubble still arrives. Stop RabbitMQ, pay, restart: outbox republishes
-- [ ] Try an UPDATE on `ledger_entry` in psql: refused by the trigger
+- [x] Wallet corrections in /admin as finance1 (request) and finance2 (approve); finance1 approving is refused
+- [x] Stop chat-service, pay, restart it: bubble still arrives. Stop RabbitMQ, pay, restart: outbox republishes
+- [x] Try an UPDATE on `ledger_entry` in psql: refused by the trigger
 
-## "Next: containerise everything"
+## Next: containerise everything
 Decision: defer until the stack has run end to end once (see "run it end to end"). Containers around code that has never run just add failure modes.
 Node, Next.js and Spring are quick to containerise; Laravel is the part that needs care.
 - [ ] Dockerfiles: chat-service, wallet-service (multi-stage Maven build, then a slim JRE image), apps/web and apps/store-web (Next.js `output: "standalone"`)
@@ -123,12 +125,12 @@ Node, Next.js and Spring are quick to containerise; Laravel is the part that nee
 - [ ] Attachments, message edit/delete, replies, reactions, message search
 - [ ] Offline send queue using the REST endpoint; push notifications (web push / FCM) instead of only desktop notifications
 - [ ] Socket.IO Redis adapter for more than one chat instance; cursor "load older" button in the message list
-- [ ] Dead-letter queues for the chat's consumers: see messaging reliability (bad messages are currently discarded)
+- [x] Dead-letter queues for the chat's consumers: see messaging reliability (bad messages are currently discarded)
 
 ## Next: wallet gaps
-- [ ] Testcontainers tests (Postgres + RabbitMQ): double confirm pays once, parallel confirms, expired confirm, insufficient funds then top-up,
+- [x] Testcontainers tests (Postgres + RabbitMQ): double confirm pays once, parallel confirms, expired confirm, insufficient funds then top-up,
       non-owner gets 404, order intent idempotency, release/refund idempotency and `EXCEEDS_HELD`, reversal blocked by insufficient funds
-- [ ] Concurrency test: 50 parallel transfers never overdraw and never deadlock
+- [x] Concurrency test: 50 parallel transfers never overdraw and never deadlock
 - [ ] Refund AFTER a release (must pull money back from the store account); partial refunds policy; disputes/chargebacks
 - [ ] Approval threshold: small adjustments auto-approved, large need a second admin; configurable limits per role
 - [ ] Audit admin reads other than wallet lookup; export of the audit log; alerting on reconciliation mismatches (scheduled job)
@@ -139,7 +141,7 @@ Node, Next.js and Spring are quick to containerise; Laravel is the part that nee
 - [ ] Remove the `dev` profile and `/dev/topup` outside local development; secrets out of `application.yml`
 
 ## Next: store backend gaps
-- [ ] FIRST: run `./setup.sh` on a machine with Composer access, then `./verify.sh`; fix whatever the first install, the test run and the panel load reveal
+- [x] FIRST: run `./setup.sh` on a machine with Composer access, then `./verify.sh`; fix whatever the first install, the test run and the panel load reveal
 - [ ] Order payment of a cart with several stores in one go (today one order and one payment per store): needs a parent "checkout" that groups orders and one wallet payment that fans out into several escrow holds
 - [ ] Vendor earnings view: needs a wallet endpoint that lets a store owner read their store account (today only finance can)
 - [ ] Refund AFTER payout (pull money back from the store account), partial refunds, returns workflow, disputes
@@ -148,7 +150,7 @@ Node, Next.js and Spring are quick to containerise; Laravel is the part that nee
 - [ ] Notifications to buyers and vendors (email/SMS/push) on order status changes; tell an applicant when their store is approved
 - [ ] Search engine (Meilisearch / Typesense / Elasticsearch) instead of SQL `like`; image resizing + CDN
 - [ ] Vendor staff accounts (more than the owner); read-only audit log screen in /admin (the table is written but has no UI)
-- [ ] Replay tooling for `store.wallet-events.dlq` (see messaging reliability)
+- [x] Replay tooling for `store.wallet-events.dlq` (see messaging reliability)
 - [ ] Stricter rate limiting per user (today per IP), and a WAF/edge limit in front of the API
 
 ## Next: storefront and integration gaps
@@ -165,9 +167,11 @@ Node, Next.js and Spring are quick to containerise; Laravel is the part that nee
 - [ ] Remove `directAccessGrantsEnabled` and the dev secret once you stop curling for tokens; decide token storage (browser vs BFF cookies)
 - [ ] Per-service broker credentials and permissions (only the wallet may publish to `wallet.events`)
 - [ ] Rate limiting and security headers on all APIs; data protection obligations (retention, deletion, export)
-- [ ] Dockerfiles + compose for all apps, CI (wallet `mvn verify`, chat `npm test`, web `next build`), environments, backups and a restore drill
-- [ ] Correlation ids across HTTP and events, structured logs, metrics and tracing
-- [ ] Event schema contract tests (wallet/store publish, chat/Laravel consume); shared `packages/contracts`
+- [x] CI (GitHub Actions: `make check`, wallet `mvn verify`, chat `npm test` with Postgres and RabbitMQ, web builds, store `php artisan test`)
+- [ ] Dockerfiles + compose for all apps, environments, backups and a restore drill
+- [x] Correlation ids across HTTP and events (see messaging reliability)
+- [ ] Structured (JSON) logs, metrics and distributed tracing on top of the correlation ids
+- [x] Event schema contract tests (wallet/store publish, chat/Laravel consume); shared `packages/contracts`
 
 ## Later: real money
 - [ ] Legal/regulatory review for holding or moving customer funds in your market; licensed partner if required

@@ -17,3 +17,4 @@ These files are the SHARED SOURCE OF TRUTH for the shape of each event, and ever
 - Money is an integer in minor units (`amountMinor`, `commissionMinor`, `totalMinor`), currency a 3-letter code, ids are strings.
 - Wallet events carry `kind` (`P2P`, `ORDER_PAYMENT`, `RELEASE`, `REFUND`). Consumers MUST check it before acting.
 - `index.json` lists every fixture with its exchange, routing key, producer and consumers. Every `.json` here except `index.json` must be listed.
+- Every event carries `correlationId`: the id of the HTTP request (or message) that caused it, also sent as the AMQP header `x-correlation-id`. A consumer that publishes a follow-up event (the store turning a payment into `order.paid`) reuses the id it received, so one id follows a payment through every service. Ids are 1-64 characters from `A-Z a-z 0-9 . _ : -`; anything else is replaced.

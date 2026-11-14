@@ -1,5 +1,6 @@
 package com.chatpay.wallet.settlement;
 
+import com.chatpay.wallet.shared.CorrelatedEvent;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.modulith.events.Externalized;
@@ -19,4 +20,5 @@ public record SettlementCompleted(
         long amountMinor,
         long commissionMinor,
         String currency,
-        Instant occurredAt) {}
+        Instant occurredAt,
+        String correlationId) implements CorrelatedEvent {}

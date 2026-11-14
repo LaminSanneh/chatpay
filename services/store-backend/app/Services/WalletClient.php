@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Correlation;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -50,7 +51,8 @@ class WalletClient
 
     private function send(string $path, array|\stdClass $json, ?string $idempotencyKey): Response
     {
-        $request = Http::withToken($this->token())->acceptJson()->timeout(10);
+        $request = Http::withToken($this->token())->acceptJson()->timeout(10)
+            ->withHeaders([Correlation::HEADER => Correlation::currentOrNew()]);     // the wallet logs and publishes under the same id
         if ($idempotencyKey !== null) {
             $request = $request->withHeaders(['Idempotency-Key' => $idempotencyKey]);
         }

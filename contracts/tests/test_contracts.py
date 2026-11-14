@@ -48,6 +48,7 @@ class PayloadTests(unittest.TestCase):
     def test_common_rules(self):
         for e in INDEX:
             p = load(e["file"])
+            self.assertRegex(p["correlationId"], r"\A[A-Za-z0-9._:-]{1,64}\Z", f"{e['file']}: every event carries the correlation id of the request that caused it")
             self.assertIsInstance(p["version"], int, e["file"])
             self.assertGreaterEqual(p["version"], 1, e["file"])
             self.assertIsInstance(p["occurredAt"], str, e["file"])
@@ -79,6 +80,7 @@ class PayloadTests(unittest.TestCase):
         paid = load("order.paid.json")
         self.assertEqual((pay["referenceType"], pay["referenceId"]), ("order", release["orderId"]))
         self.assertEqual(paid["orderId"], pay["referenceId"])
+        self.assertEqual(paid["correlationId"], pay["correlationId"], "order.paid is caused by the payment, so it carries the same correlation id")
         self.assertEqual(paid["totalMinor"], pay["amountMinor"])
         self.assertEqual(sum(i["quantity"] * i["unitPriceMinor"] for i in paid["items"]), paid["totalMinor"])
         self.assertEqual(release["amountMinor"], pay["amountMinor"])

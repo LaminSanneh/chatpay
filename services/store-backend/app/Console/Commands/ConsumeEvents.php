@@ -8,6 +8,7 @@ use App\Messaging\MessageProcessor;
 use App\Messaging\RetryPolicy;
 use App\Messaging\Topology;
 use App\Services\OrderService;
+use App\Support\Correlation;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
@@ -46,7 +47,7 @@ class ConsumeEvents extends Command
                 };
                 $channel->basic_consume($names['main'], '', false, false, false, false, function (AMQPMessage $message) use ($port, $handler, $names, $policy) {
                     MessageProcessor::process($port, AmqpLibChannel::delivery($message), $handler, $names, $policy,
-                        static fn (string $line) => Log::warning("[events] {$line}"));
+                        static fn (string $line) => Log::warning('[events] [cid='.Correlation::current()."] {$line}"));
                 });
 
                 $this->info("Consuming {$names['main']} from {$cfg['wallet_exchange']}; retries: ".implode(', ', array_map(fn ($d) => "{$d}ms", array_keys($names['retryQueues']))).'; dead letters: '.$names['dlq']);

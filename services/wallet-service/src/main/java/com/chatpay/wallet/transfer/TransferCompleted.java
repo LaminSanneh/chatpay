@@ -1,5 +1,6 @@
 package com.chatpay.wallet.transfer;
 
+import com.chatpay.wallet.shared.CorrelatedEvent;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.modulith.events.Externalized;
@@ -29,4 +30,5 @@ public record TransferCompleted(
         String note,
         String referenceType,
         String referenceId,
-        Instant occurredAt) {}
+        Instant occurredAt,
+        String correlationId) implements CorrelatedEvent {}

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Correlation;
 use App\Models\OutboxEvent;
 
 /**
@@ -15,7 +16,8 @@ class EventPublisher
         OutboxEvent::create([
             'exchange' => $exchange,
             'routing_key' => $routingKey,
-            'payload' => $payload + ['version' => 1, 'occurredAt' => now()->toIso8601String()],
+            // The correlation id is part of the stored event, so it survives a crash and the relay can publish it as the x-correlation-id header.
+            'payload' => $payload + ['version' => 1, 'occurredAt' => now()->toIso8601String(), 'correlationId' => Correlation::currentOrNew()],
         ]);
     }
 }

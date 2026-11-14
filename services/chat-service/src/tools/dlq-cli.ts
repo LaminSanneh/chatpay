@@ -45,7 +45,7 @@ export function formatDeadLetter(d: DeadLetter): string {
   return [
     `#${d.position}  ${d.failureKind ?? '?'}  retries=${d.retryCount}  ${d.failedAt ?? 'unknown time'}${replayed}`,
     `    from ${d.originalQueue ?? '?'} / ${d.originalRoutingKey ?? '?'}   ${d.errorClass ?? ''}: ${d.error ?? '(no error recorded)'}`,
-    `    ${d.bytes} bytes: ${d.preview}`,
+    `    ${d.correlationId ? 'cid=' + d.correlationId + '  ' : ''}${d.bytes} bytes: ${d.preview}`,
   ].join('\n');
 }
 

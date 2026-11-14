@@ -7,7 +7,9 @@ use App\Models\OutboxEvent;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
+use App\Support\Correlation;
 use PhpAmqpLib\Message\AMQPMessage;
+use PhpAmqpLib\Wire\AMQPTable;
 
 /**
  * Publishes outbox rows to RabbitMQ (at-least-once). Consumers must therefore be idempotent, and the chat's are.
@@ -41,11 +43,12 @@ class RelayOutbox extends Command
                     foreach ($rows as $row) {
                         $message = new AMQPMessage(json_encode($row->payload), [
                             'content_type' => 'application/json', 'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT,
+                            'application_headers' => new AMQPTable([Correlation::AMQP_HEADER => (string) ($row->payload['correlationId'] ?? Correlation::generate())]),
                         ]);
                         $channel->basic_publish($message, $row->exchange, $row->routing_key);
                         $channel->wait_for_pending_acks();
                         $row->update(['published_at' => now(), 'attempts' => $row->attempts + 1]);
-                        $this->line("published {$row->routing_key} #{$row->id}");
+                        $this->line("[cid=".($row->payload['correlationId'] ?? '-')."] published {$row->routing_key} #{$row->id}");
                     }
                     if ($this->option('once')) {
                         return self::SUCCESS;

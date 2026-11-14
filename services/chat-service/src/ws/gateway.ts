@@ -6,6 +6,7 @@ import type { TokenVerifier } from '../core/ports';
 import type { ChatService } from '../core/chat-service';
 import type { Identity } from '../core/types';
 import { isDependencyOutage } from '../messaging/retry-policy';
+import { socketCorrelation } from '../observability/correlation';
 
 const userChannel = (userId: string) => `user:${userId}`;
 
@@ -42,6 +43,7 @@ export function attachSocketGateway(
   });
 
   io.on('connection', (socket) => {
+    socket.use(socketCorrelation);                 // each incoming event runs under its own correlation id
     const me = socket.data.identity as Identity;
     void socket.join(userChannel(me.userId));
 

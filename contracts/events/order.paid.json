@@ -7,9 +7,18 @@
   "totalMinor": 5000,
   "currency": "GMD",
   "items": [
-    { "name": "Ceramic mug", "quantity": 2, "unitPriceMinor": 2500, "imageUrl": "https://example.com/mug.png" }
+    {
+      "name": "Ceramic mug",
+      "quantity": 2,
+      "unitPriceMinor": 2500,
+      "imageUrl": "https://example.com/mug.png"
+    }
   ],
-  "context": { "type": "chat", "roomId": "7c1f0e9a-2b3d-4c5e-8f6a-9b0c1d2e3f40" },
+  "context": {
+    "type": "chat",
+    "roomId": "7c1f0e9a-2b3d-4c5e-8f6a-9b0c1d2e3f40"
+  },
   "version": 1,
-  "occurredAt": "2026-11-12T10:16:03+00:00"
+  "occurredAt": "2026-11-12T10:16:03+00:00",
+  "correlationId": "3b9e5d17-2c8a-4f60-a1d4-9e7c6b5a4d30"
 }

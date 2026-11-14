@@ -1,6 +1,7 @@
 package com.chatpay.wallet.settlement.internal;
 
 import com.chatpay.wallet.account.AccountApi;
+import com.chatpay.wallet.shared.Correlation;
 import com.chatpay.wallet.account.AccountView;
 import com.chatpay.wallet.ledger.Direction;
 import com.chatpay.wallet.ledger.LedgerApi;
@@ -110,7 +111,7 @@ class SettlementService implements SettlementApi {
 
         Settlement saved = settlements.save(new Settlement(orderId, kind, amount, commission, key, ledgerTx, actor));
         events.publishEvent(new SettlementCompleted(1, saved.getId(), orderId, kind, escrow.getStoreId(), escrow.getPayerUserId(),
-                amount, commission, escrow.getCurrency(), Instant.now()));
+                amount, commission, escrow.getCurrency(), Instant.now(), Correlation.currentOrNew()));
         return view(saved, held - amount);
     }
 

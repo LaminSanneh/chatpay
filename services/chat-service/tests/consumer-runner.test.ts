@@ -96,7 +96,9 @@ describe('transient failures', () => {
       [H.errorStack]: headersOf(p)[H.errorStack],
       [H.firstFailedAt]: '2026-01-01T00:00:01.000Z',
       [H.failedAt]: '2026-01-01T00:00:01.000Z',
+      [H.correlationId]: headersOf(p)[H.correlationId],      // none arrived with the message, so one was made (see correlation.test.ts)
     });
+    assert.match(String(headersOf(p)[H.correlationId]), /^[0-9a-f-]{36}$/);
     assert.deepEqual(ch.acked, [msg]);
     assert.equal(ch.nacked.length, 0);
   });

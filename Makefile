@@ -7,11 +7,7 @@ MOCK_RABBIT := http://127.0.0.1:15673
 
 .DEFAULT_GOAL := help
 TEST_CHAT_ENV := TEST_DATABASE_URL=postgres://chat:chat@localhost:5434/chat RABBITMQ_URL=amqp://chatpay:chatpay@localhost:5672
-<<<<<<< ours
-.PHONY: test-contracts e2e-resilience test-store-unit test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it run-wallet run-chat run-store run-all-services
-=======
-.PHONY: e2e-correlation test-contracts e2e-resilience test-store-unit test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it
->>>>>>> theirs
+.PHONY: e2e-correlation test-contracts e2e-resilience test-store-unit test-chat help check check-scripts test-mocks doctor doctor-fixtures doctor-mock-rabbit mock-rabbit mock-stack verify-mock e2e-mock test-wallet test-wallet-it run-wallet run-chat run-store run-all-services
 
 help: ## list the targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'

@@ -42,9 +42,9 @@ class EventPublishingIT extends OrderWalletIntegrationTest {
     private static final String EXCHANGE = "wallet.events";
 
     private static final Set<String> TRANSFER_COMPLETED_FIELDS = Set.of("version", "transferId", "intentId", "kind", "fromUserId", "toUserId",
-            "amountMinor", "currency", "note", "referenceType", "referenceId", "occurredAt");
+            "amountMinor", "currency", "note", "referenceType", "referenceId", "occurredAt", "correlationId");
     private static final Set<String> SETTLEMENT_COMPLETED_FIELDS = Set.of("version", "settlementId", "orderId", "kind", "storeId", "payerUserId",
-            "amountMinor", "commissionMinor", "currency", "occurredAt");
+            "amountMinor", "commissionMinor", "currency", "occurredAt", "correlationId");
 
     @Autowired AmqpAdmin amqp;
     @Autowired RabbitTemplate rabbit;

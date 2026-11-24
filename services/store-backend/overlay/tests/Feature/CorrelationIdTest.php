@@ -29,9 +29,10 @@ class CorrelationIdTest extends TestCase
 
     public function test_a_response_carries_the_id_the_client_sent_or_a_new_one(): void
     {
-        $sent = $this->withHeader('X-Correlation-Id', 'from-the-client-1')->getJson('/api/v1/products');
+        // withHeader() sticks to the test for every later request; headers passed to getJson() apply to that one request only.
+        $sent = $this->getJson('/api/v1/products', ['X-Correlation-Id' => 'from-the-client-1']);
         $none = $this->getJson('/api/v1/products');
-        $bad = $this->withHeader('X-Correlation-Id', 'not valid!')->getJson('/api/v1/products');
+        $bad = $this->getJson('/api/v1/products', ['X-Correlation-Id' => 'not valid!']);
 
         $sent->assertHeader('X-Correlation-Id', 'from-the-client-1');
         $this->assertMatchesRegularExpression(self::UUID, $none->headers->get('X-Correlation-Id'));

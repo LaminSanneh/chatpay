@@ -6,7 +6,9 @@ use App\Models\Product;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\KeycloakJwt;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /** Shared setup for the feature tests: fake logins (alice, bob, carol, finance), a fake wallet, and store/product builders. */
 trait StoreFixtures
@@ -36,6 +38,9 @@ trait StoreFixtures
     /** A wallet that accepts everything. Override single routes by calling Http::fake again with a more specific pattern first. */
     protected function fakeWallet(array $overrides = []): void
     {
+        // Http::fake() ADDS stubs to the existing fake and the FIRST matching stub wins, so a second call with overrides (a wallet that fails,
+        // after setUp() already installed a working one) would be silently ignored. Start from a clean client every time.
+        Http::swap(new HttpFactory());
         Http::fake($overrides + [
             '*/protocol/openid-connect/token' => Http::response(['access_token' => 'svc-token', 'expires_in' => 900]),
             '*/api/v1/internal/transfer-intents' => Http::response(['id' => 'intent-1', 'expiresAt' => now()->addMinutes(30)->toIso8601String()], 201),
@@ -46,7 +51,12 @@ trait StoreFixtures
 
     protected function makeStore(array $attributes = []): Store
     {
-        return Store::create($attributes + ['owner_user_id' => $this->bob, 'name' => "Bob's Shop", 'slug' => 'bobs-shop', 'status' => 'active']);
+        if (! array_key_exists('slug', $attributes)) {
+            // The first store of a test is 'bobs-shop' (some tests ask for it by name); further ones must not collide with it.
+            $attributes['slug'] = Store::where('slug', 'bobs-shop')->exists() ? 'bobs-shop-'.Str::lower(Str::random(6)) : 'bobs-shop';
+        }
+
+        return Store::create($attributes + ['owner_user_id' => $this->bob, 'name' => "Bob's Shop", 'status' => 'active']);
     }
 
     protected function makeProduct(Store $store, array $attributes = []): Product

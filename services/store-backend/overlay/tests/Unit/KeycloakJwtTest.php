@@ -31,6 +31,9 @@ class KeycloakJwtTest extends TestCase
 
     private function jwks(array ...$keys): void
     {
+        // A second Http::fake() would ADD a stub behind the first, which still wins: swap in a fresh client so this REPLACES the key set
+        // (that is what a Keycloak key rotation looks like to the verifier).
+        Http::swap(new \Illuminate\Http\Client\Factory());
         Http::fake(['*/protocol/openid-connect/certs' => Http::response(['keys' => $keys])]);
     }
 

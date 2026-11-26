@@ -162,6 +162,18 @@ Node, Next.js and Spring are quick to containerise; Laravel is the part that nee
 - [ ] Logging out of one app does not log out the other (Keycloak SSO session): decide whether single logout is wanted
 - [ ] Feature flags so the Shop panel in chat and the chat link in the store can be switched off by configuration
 
+## Next: test infrastructure (databases and brokers for tests)
+Principle: tests NEVER connect to development infrastructure (a `RefreshDatabase` run against the dev database already wiped it once), and every test dependency is defined in ONE place that local runs and CI share.
+Recommended approach (decide and write it down as the first item): wallet stays on Testcontainers; chat and store use a separate, disposable test stack defined in `docker-compose.test.yml`; the store keeps SQLite as its fast default and adds a Postgres run.
+- [ ] Decision record (`docs/decisions/test-infrastructure.md`): the principle above, the per-service choice, the trade-offs, and how to change it
+- [ ] `docker-compose.test.yml`: Postgres 16 and RabbitMQ 3.13 on their own ports, data on tmpfs, healthchecks; `make test-infra-up` / `test-infra-down` (`up --wait`); the SAME file is used by CI instead of per-job GitHub service containers
+- [ ] One place for versions (Postgres, RabbitMQ) used by the dev compose, the test compose, Testcontainers and CI, so they cannot drift
+- [ ] chat-service: `make test-chat` targets the test stack (not the dev `chat-db`/`rabbitmq`); a guard refuses a database whose name does not end in `_test`, like the store's `TestCase`; per-run schema or vhost so parallel runs cannot collide
+- [ ] store-backend: keep SQLite `:memory:` for the fast default; add `make test-store-pg` (Postgres `store_test` on the test stack) and a CI job, because SQLite cannot check `lockForUpdate` stock reservation, jsonb, constraint behaviour or migration parity; widen the `TestCase` guard to allow `*_test` Postgres databases only
+- [ ] wallet-service: stay on Testcontainers; enable container reuse for local reruns (`testcontainers.reuse.enable=true`, `withReuse(true)`); keep CI as is
+- [ ] Measure before and after (time per `make test-*`, memory) and record it in the decision record; revisit if a suite gets slow
+- [ ] CI: one full-stack job that starts every service (needs "containerise everything") and runs `e2e.sh`, `e2e-resilience.sh` and `e2e-correlation.sh`; today none of them runs in CI
+
 ## Later: identity, security, operations
 - [ ] Keycloak for real use: own database, HTTPS, hostname, proper admin password, backups; add `aud` mappers and validate them
 - [ ] Remove `directAccessGrantsEnabled` and the dev secret once you stop curling for tokens; decide token storage (browser vs BFF cookies)

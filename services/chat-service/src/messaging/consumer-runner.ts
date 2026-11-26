@@ -12,6 +12,8 @@ export interface RunnerChannel extends TopologyChannel {
   waitForConfirms(): Promise<void>;
 }
 
+export const DEFAULT_REQUEUE_DELAY_MS = 1000;
+
 export type Handler = (routingKey: string, payload: unknown) => Promise<void>;
 
 export interface Logger {
@@ -24,7 +26,7 @@ export interface RunnerOptions {
   policy: RetryPolicy;
   log?: Logger;
   now?: () => Date;
-  /** If republishing a failed message itself fails, wait this long before giving the message back to the queue. */
+  /** If republishing a failed message itself fails, wait this long before giving the message back to the queue (default 1000). */
   requeueDelayMs?: number;
 }
 
@@ -45,10 +47,15 @@ export const H = {
 const consoleLogger: Logger = createCorrelatedLogger();
 
 /** Declares the topology, then handles every message of the queue with retry and dead-lettering. */
-export async function startConsumer(ch: RunnerChannel, spec: ConsumerSpec, handler: Handler, opts: RunnerOptions): Promise<QueueNames> {
+export async function startConsumer(
+  ch: RunnerChannel, spec: ConsumerSpec, handler: Handler, opts: RunnerOptions, onCancel?: () => void,
+): Promise<QueueNames> {
   const names = await assertTopology(ch, spec, opts.policy);
   await ch.consume(spec.queue, (msg) => {
-    if (msg) void processMessage(ch, spec, names, handler, opts, msg);
+    // amqplib delivers null when the BROKER cancels the consumer (the queue was deleted, a node failed over). The channel stays open, so
+    // without this the service would keep running while consuming nothing.
+    if (!msg) { onCancel?.(); return; }
+    void processMessage(ch, spec, names, handler, opts, msg);
   });
   return names;
 }
@@ -117,7 +124,8 @@ async function processDelivery(
       }
     } catch (publishError) {
       log.error(`[events] ${spec.queue} ${routingKey}: could not move a failed message (${(publishError as Error).message}); giving it back to the queue`);
-      if (opts.requeueDelayMs) await new Promise((r) => setTimeout(r, opts.requeueDelayMs));
+      const wait = opts.requeueDelayMs ?? DEFAULT_REQUEUE_DELAY_MS;      // without a pause a broker that refuses copies would be hammered in a tight loop
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       try { ch.nack(msg, false, true); } catch { /* the channel is gone: the broker requeues the unacked message by itself */ }
     }
     return;

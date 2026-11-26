@@ -20,4 +20,5 @@ for q in "${QUEUES[@]}"; do
   code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 -u "$RABBIT_USER:$RABBIT_PASS" -X DELETE "$RABBIT/api/queues/%2F/$q")
   echo "  $q -> HTTP $code (204 deleted, 404 did not exist)"
 done
-echo "Now (re)start chat-service: it re-creates the queues with a dead-letter exchange, a dead-letter queue and retry queues."
+echo "chat-service notices the cancelled consumers and re-creates the queues (dead-letter exchange, dead-letter queue, retry queues) by itself;"
+echo "an older build without that needs a restart."

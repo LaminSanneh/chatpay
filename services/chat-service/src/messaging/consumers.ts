@@ -121,7 +121,7 @@ export async function connectLoop(url: string, bindings: Binding[], policy: Retr
       channel.on('close', () => lose('the channel closed'));
       await channel.prefetch(10);
       for (const b of bindings) {
-        const names = await startConsumer(channel, b, b.handle, { policy });
+        const names = await startConsumer(channel, b, b.handle, { policy }, () => lose(`the broker cancelled the consumer of ${b.queue} (was the queue deleted?)`));
         log.info(`[events] consuming ${b.queue} <- ${b.exchange} (${b.routingKeys.join(', ')}); retries: ${names.retryQueues.map((r) => r.delayMs + 'ms').join(', ')}; dead letters: ${names.dlq}`);
       }
       failures = 0;

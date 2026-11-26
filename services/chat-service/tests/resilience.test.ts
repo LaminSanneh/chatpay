@@ -262,6 +262,18 @@ describe('the RabbitMQ connection loop', () => {
     await finish(h);
   });
 
+  test('when the BROKER cancels a consumer (its queue was deleted) the session is rebuilt and the queue is declared again', async () => {
+    const h = harness();
+    await until(() => h.conns.length === 1 && consuming(h.conns[0]));
+
+    h.conns[0].channel.consumers.get('chat.wallet-events')!(null);      // what amqplib does when RabbitMQ sends basic.cancel
+
+    await until(() => h.conns.length === 2 && consuming(h.conns[1]));
+    assert.ok(h.lines.some((l) => /the broker cancelled the consumer of chat\.wallet-events \(was the queue deleted\?\)/.test(l.text)));
+    assert.ok(h.conns[1].channel.queues.has('chat.wallet-events'), 'the topology was declared again');
+    await finish(h);
+  });
+
   test('error events on the connection and the channel are logged, not thrown (an emitter with no listener would kill the process)', async () => {
     const h = harness();
     await until(() => h.conns.length === 1 && consuming(h.conns[0]));

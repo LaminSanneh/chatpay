@@ -4,12 +4,12 @@
  * in messaging.integration.test.ts.
  */
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { describe, mock, test } from 'node:test';
 import { z } from 'zod';
 import { FakeChannel } from '../../../mock-services/amqp/fake-channel';
-import { H, type Logger, processMessage, startConsumer } from '../src/messaging/consumer-runner';
+import { DEFAULT_REQUEUE_DELAY_MS, H, type Logger, processMessage, startConsumer } from '../src/messaging/consumer-runner';
 import { DEFAULT_RETRY_POLICY, PermanentError, type RetryPolicy, TransientError } from '../src/messaging/retry-policy';
-import { DEAD_LETTER_EXCHANGE, type ConsumerSpec, type QueueNames } from '../src/messaging/topology';
+import { DEAD_LETTER_EXCHANGE, type ConsumerSpec, namesFor, type QueueNames } from '../src/messaging/topology';
 
 const SPEC: ConsumerSpec = { exchange: 'store.events', queue: 'chat.store-events', routingKeys: ['store.opened', 'store.closed', 'order.paid'] };
 const silent: Logger = { info() {}, warn() {}, error() {} };
@@ -244,5 +244,67 @@ describe('when the failed message cannot be moved', () => {
 
     assert.equal(ch.acked.length, 0);
     assert.deepEqual(ch.nacked, [{ msg, requeue: true }]);
+  });
+});
+
+describe('wiring: what the broker sees', () => {
+  const until = async (check: () => boolean) => { for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 5)); };
+
+  test('a delivery through the registered consumer callback runs the handler and is acked', async () => {
+    const ch = new FakeChannel();
+    const seen: unknown[] = [];
+    await startConsumer(ch, SPEC, async (key, payload) => { seen.push([key, payload]); }, { policy: DEFAULT_RETRY_POLICY, log: silent });
+    const msg = FakeChannel.message({ n: 1 }, { routingKey: 'store.opened' });
+
+    ch.consumers.get(SPEC.queue)!(msg);
+    await until(() => ch.acked.length === 1);
+
+    assert.deepEqual(seen, [['store.opened', { n: 1 }]]);
+    assert.deepEqual(ch.acked, [msg]);
+  });
+
+  test('a failure through the registered callback ends up in the retry queue, not lost', async () => {
+    const ch = new FakeChannel();
+    await startConsumer(ch, SPEC, async () => { throw new Error('db down'); }, { policy: DEFAULT_RETRY_POLICY, log: silent, requeueDelayMs: 0 });
+
+    ch.consumers.get(SPEC.queue)!(FakeChannel.message({ n: 1 }, { routingKey: 'order.paid' }));
+    await until(() => ch.acked.length === 1);
+
+    assert.equal(ch.published[0].routingKey, 'chat.store-events.retry.2000ms');
+    assert.equal(ch.depth('chat.store-events.retry.2000ms'), 1);
+  });
+
+  test('a consumer cancelled by the broker (queue deleted) is reported to the caller exactly once per cancel', async () => {
+    const ch = new FakeChannel();
+    let cancelled = 0;
+    await startConsumer(ch, SPEC, async () => undefined, { policy: DEFAULT_RETRY_POLICY, log: silent }, () => { cancelled++; });
+
+    ch.consumers.get(SPEC.queue)!(null);
+
+    assert.equal(cancelled, 1);
+  });
+
+  test('when the copy of a failed message is refused, the message goes back only after a pause (no tight loop against a struggling broker)', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const ch = new FakeChannel();
+      ch.confirmError = new Error('broker refused the copy');
+      const names = namesFor(SPEC.queue, DEFAULT_RETRY_POLICY);
+      const msg = FakeChannel.message({}, { routingKey: 'order.paid' });
+
+      const done = processMessage(ch, SPEC, names, async () => { throw new TransientError('x'); }, { policy: DEFAULT_RETRY_POLICY, log: silent }, msg);
+      await new Promise((r) => setImmediate(r));
+      assert.equal(ch.nacked.length, 0, 'still waiting');
+      mock.timers.tick(DEFAULT_REQUEUE_DELAY_MS - 1);
+      await new Promise((r) => setImmediate(r));
+      assert.equal(ch.nacked.length, 0, 'one millisecond short of the pause');
+      mock.timers.tick(1);
+      await done;
+
+      assert.deepEqual(ch.nacked, [{ msg, requeue: true }]);
+      assert.equal(ch.acked.length, 0);
+    } finally {
+      mock.timers.reset();
+    }
   });
 });

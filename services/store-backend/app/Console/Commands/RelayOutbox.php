@@ -18,8 +18,50 @@ use PhpAmqpLib\Wire\AMQPTable;
  */
 class RelayOutbox extends Command
 {
+    public const MAX_ERROR_LENGTH = 2000;
+
     protected $signature = 'outbox:relay {--once : publish what is pending and exit}';
     protected $description = 'Publish pending outbox events (store.opened, store.closed, order.paid) to RabbitMQ';
+
+    /**
+     * Publishes pending rows one by one, in id order, and records what goes wrong.
+     *
+     * A row whose publish (or the broker's confirm) fails gets failed_attempts + 1 and a truncated last_error, and is NOT marked published.
+     * The batch then stops, so a later row never overtakes the failing one, and the original error is rethrown for the caller to back off.
+     * A later success sets published_at and clears last_error (failed_attempts stays as history).
+     * If the broker accepts a message but marking the row fails, the row is sent again later: at-least-once, consumers are idempotent.
+     *
+     * @param callable(OutboxEvent): void $publish        publishes ONE row; throws if the broker did not confirm it
+     * @param (callable(OutboxEvent): void)|null $onPublished called after a row was published and marked
+     * @return int how many rows were published
+     */
+    public function relayPending(callable $publish, int $limit = 100, ?callable $onPublished = null): int
+    {
+        $published = 0;
+        foreach (OutboxEvent::query()->whereNull('published_at')->orderBy('id')->limit($limit)->get() as $row) {
+            try {
+                $publish($row);
+            } catch (\Throwable $e) {
+                try {
+                    $row->update([
+                        'failed_attempts' => $row->failed_attempts + 1,
+                        'last_error' => mb_substr(get_class($e).': '.$e->getMessage(), 0, self::MAX_ERROR_LENGTH),
+                    ]);
+                } catch (\Throwable) {
+                    // The database is failing too: the broker error is the one worth reporting, so do not mask it.
+                }
+
+                throw $e;
+            }
+            $row->update(['published_at' => now(), 'attempts' => $row->attempts + 1, 'last_error' => null]);
+            $published++;
+            if ($onPublished !== null) {
+                $onPublished($row);
+            }
+        }
+
+        return $published;
+    }
 
     public function handle(): int
     {
@@ -39,17 +81,16 @@ class RelayOutbox extends Command
                 $failures = 0;
 
                 do {
-                    $rows = OutboxEvent::query()->whereNull('published_at')->orderBy('id')->limit(100)->get();
-                    foreach ($rows as $row) {
+                    // A row that cannot be published is recorded (failed_attempts, last_error) by relayPending(), then the failure
+                    // reaches the catch below: the relay reconnects with backoff. Rows stay in order.
+                    $this->relayPending(function (OutboxEvent $row) use ($channel) {
                         $message = new AMQPMessage(json_encode($row->payload), [
                             'content_type' => 'application/json', 'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT,
                             'application_headers' => new AMQPTable([Correlation::AMQP_HEADER => (string) ($row->payload['correlationId'] ?? Correlation::generate())]),
                         ]);
                         $channel->basic_publish($message, $row->exchange, $row->routing_key);
-                        $channel->wait_for_pending_acks();
-                        $row->update(['published_at' => now(), 'attempts' => $row->attempts + 1]);
-                        $this->line("[cid=".($row->payload['correlationId'] ?? '-')."] published {$row->routing_key} #{$row->id}");
-                    }
+                        $channel->wait_for_pending_acks();           // the broker's confirm: only after it is the row marked as sent
+                    }, 100, fn (OutboxEvent $row) => $this->line('[cid='.($row->payload['correlationId'] ?? '-')."] published {$row->routing_key} #{$row->id}"));
                     if ($this->option('once')) {
                         return self::SUCCESS;
                     }
